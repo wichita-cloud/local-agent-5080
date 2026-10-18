@@ -175,7 +175,7 @@ details.adv{margin-top:8px}details.adv summary{font-size:13px;color:var(--mut)}
         <tr><th>Model size</th><th>Typical file</th><th>Context that fits</th></tr>
         <tr><td>8B</td><td>Q4_K_M ≈ 5 GB · Q8_0 ≈ 9 GB</td><td>64k+ (fast, weaker at tools)</td></tr>
         <tr><td>12–14B</td><td>Q4_K_M ≈ 9 GB · Q6_K ≈ 12 GB</td><td>32k–64k</td></tr>
-        <tr><td>27B dense</td><td>IQ4_XS ≈ 13–15 GB</td><td>32k–45k (the default)</td></tr>
+        <tr><td>27B dense</td><td>IQ4_XS ≈ 13–15 GB</td><td>32k (q8_0 cache, the default) · 64k (q4_0 cache, newer build)</td></tr>
         <tr><td>30–35B MoE</td><td>IQ4_XS ≈ 17–18 GB</td><td>needs some experts on the CPU</td></tr>
       </table>
       <div class="note">Rule: file size + context memory + ~0.5 GB must stay under ~15.5 GB. If it doesn't fit, the model
@@ -486,6 +486,7 @@ async function loadModels() {
       p.benched ? `<span class="tag on">benchmarked here: ${esc(p.benched.decode_ms)} ms/token, ${esc(p.benched.prefill_tps)} tok/s reading</span>`
         : p.MEASURED === "no" ? `<span class="tag w">not yet benchmarked</span>` : "",
       /draft-mtp/.test(p.EXTRA_ARGS) ? `<span class="tag">MTP speed-up</span>` : "",
+      p.MMPROJ_FILE ? `<span class="tag">sees images</span>` : "",
       p.tuned ? `<span class="tag w">your adjustments</span>` : "",
     ].join("");
     const acts = [

@@ -40,10 +40,16 @@ fi
 
 mkdir -p "$STATE_DIR" 2>/dev/null
 
+# The stack-wide llama.cpp image. A profile may pin its own (LLAMA_IMAGE_PROFILE) when it needs a newer build;
+# every other profile keeps running on exactly the build it was measured on.
+export STACK_LLAMA_IMAGE="$LLAMA_IMAGE"
+
 load_profile() {   # load_profile [name]: exports the profile's variables
   local name="${1:-$ACTIVE_MODEL}"
   local f="$REPO/models/$name.env"
   [ -f "$f" ] || { echo "no such model profile: $name (see bin/model.sh list)" >&2; return 1; }
+  # Optional settings: clear them first, or loading a second profile in the same shell would inherit the first one's.
+  unset LLAMA_IMAGE_PROFILE MMPROJ_FILE MMPROJ_URL MMPROJ_MIN_BYTES BASE_FILE MTP_DONOR_URL
   set -a; . "$f"
   # Your adjustments to this profile (console → Models → Advanced, or bin/model.sh tune). Kept outside models/ so an
   # update to the shipped profile never overwrites them, and per profile so each model keeps its own. NO_TUNING=1
@@ -51,7 +57,13 @@ load_profile() {   # load_profile [name]: exports the profile's variables
   TUNED=no
   if [ "${NO_TUNING:-0}" != 1 ] && [ -f "$REPO/config/tuning/$name.env" ]; then . "$REPO/config/tuning/$name.env"; TUNED=yes; fi
   set +a
-  PROFILE="$name"; export PROFILE
+  LLAMA_IMAGE="${LLAMA_IMAGE_PROFILE:-$STACK_LLAMA_IMAGE}"
+  PROFILE="$name"; export PROFILE LLAMA_IMAGE
+}
+
+# Image understanding: the profile names a vision projector (MMPROJ_FILE) and the file is fully downloaded.
+vision_file_ok() {
+  [ -n "${MMPROJ_FILE:-}" ] && [ "$(stat -c%s "$MODEL_DIR/$MMPROJ_FILE" 2>/dev/null || echo 0)" -ge "${MMPROJ_MIN_BYTES:-1}" ]
 }
 
 # ── output ───────────────────────────────────────────────────────────────────────

@@ -4,7 +4,8 @@
 #   bin/model.sh list              profiles, with the active one marked and whether its file is present
 #   bin/model.sh current           active profile and what llama is actually serving
 #   bin/model.sh use <profile>     switch: set ACTIVE_MODEL, relaunch llama, rewrite OpenClaw config, restart gateway, bench
-#   bin/model.sh download <profile>  fetch the profile's MODEL_URL (resumable, checks disk space on WSL *and* C:)
+#   bin/model.sh download <profile>  fetch the profile's files: model, vision projector, MTP layer (resumable,
+#                                    checks disk space on WSL *and* C:)
 #   bin/model.sh tune <profile> k=v  adjust sampling / context / thinking for that profile only (--reset to undo)
 #
 # The console's Models tab (console/server.py) calls exactly these subcommands.
@@ -52,29 +53,58 @@ case "$cmd" in
     "$REPO/bin/gateway-up.sh" || die "gateway restart failed"
     "$REPO/bin/bench.sh" --quick ;;
   download)
-    # Fetch the profile's MODEL_URL into MODEL_DIR. Resumable (re-run continues a broken download).
+    # Fetch everything the profile needs into MODEL_DIR. Resumable (re-run continues a broken download):
+    #   * the model (MODEL_URL)
+    #   * its vision projector, if the profile has one (MMPROJ_URL), for image understanding
+    #   * MTP profiles (MTP_DONOR_URL): MODEL_URL is the plain base model (saved as BASE_FILE); bin/mtp-graft.py then
+    #     downloads only the ~250 MB MTP layer from the donor and writes MODEL_FILE next to it. BASE_FILE is kept
+    #     (other profiles use it) and never modified.
     # Disk check covers BOTH filesystems: WSL's ext4 lives in a .vhdx on the Windows drive, so a download that
     # fits "inside" WSL can still fill C:. A full C: can corrupt the WSL disk, which is much worse than a failed download.
     new="${2:-}"; [ -n "$new" ] || die "usage: bin/model.sh download <profile>"
     load_profile "$new" >/dev/null || exit 1
     [ -n "${MODEL_URL:-}" ] || die "profile $new has no MODEL_URL. Download the file by hand (docs/MODELS.md)"
-    f="$MODEL_DIR/$MODEL_FILE"; mkdir -p "$MODEL_DIR"
-    have=$(stat -c%s "$f" 2>/dev/null || echo 0)
-    [ "$have" -ge "$MIN_BYTES" ] && { ok "already downloaded: $f ($have bytes)"; exit 0; }
-    total=$(curl -sIL -m 30 "$MODEL_URL" | tr -d '\r' | awk 'tolower($1)=="content-length:"{v=$2} END{print v+0}')
-    [ "${total:-0}" -gt 0 ] || die "could not read the file size from $MODEL_URL (link wrong, or Hugging Face needs a login for it)"
-    need_mb=$(( (total - have) / 1048576 + 5120 ))         # what's left + 5 GB margin
-    for fs in "$MODEL_DIR" /mnt/c; do
-      [ -d "$fs" ] || continue
-      free_mb=$(df -Pm "$fs" | awk 'NR==2{print $4}')
-      [ "$free_mb" -ge "$need_mb" ] || die "not enough space on $fs: ${free_mb} MB free, need ${need_mb} MB (file + 5 GB margin)"
-    done
-    log "downloading $MODEL_FILE ($(( total / 1048576 )) MB) to $MODEL_DIR"
-    curl -fL --retry 5 --retry-delay 5 -C - -o "$f" "$MODEL_URL" </dev/null || die "download failed. Run the same command again (or press Download again) to resume"
-    got=$(stat -c%s "$f" 2>/dev/null || echo 0)
-    [ "$got" -eq "$total" ] || die "size mismatch: got $got bytes, expected $total. Run it again (or press Download again) to resume"
-    [ "$got" -ge "$MIN_BYTES" ] || die "file is smaller than MIN_BYTES ($MIN_BYTES): the profile and the file disagree"
-    ok "downloaded $f ($got bytes). Next: bin/model.sh use $new" ;;
+    mkdir -p "$MODEL_DIR"
+    space_for() {   # space_for <MB>: dies unless both WSL and C: have that much free
+      for fs in "$MODEL_DIR" /mnt/c; do
+        [ -d "$fs" ] || continue
+        free_mb=$(df -Pm "$fs" | awk 'NR==2{print $4}')
+        [ "$free_mb" -ge "$1" ] || die "not enough space on $fs: ${free_mb} MB free, need $1 MB (file + 5 GB margin)"
+      done
+    }
+    fetch() {   # fetch <url> <file> <min-bytes>
+      local url=$1 f="$MODEL_DIR/$2" min=$3 have total got
+      have=$(stat -c%s "$f" 2>/dev/null || echo 0)
+      [ "$have" -ge "$min" ] && { ok "already downloaded: $f ($have bytes)"; return 0; }
+      total=$(curl -sIL -m 30 "$url" | tr -d '\r' | awk 'tolower($1)=="content-length:"{v=$2} END{print v+0}')
+      [ "${total:-0}" -gt 0 ] || die "could not read the file size from $url (link wrong, or Hugging Face needs a login for it)"
+      space_for $(( (total - have) / 1048576 + 5120 ))      # what's left + 5 GB margin
+      log "downloading $2 ($(( total / 1048576 )) MB) to $MODEL_DIR"
+      curl -fL --retry 5 --retry-delay 5 -C - -o "$f" "$url" </dev/null || die "download failed. Run the same command again (or press Download again) to resume"
+      got=$(stat -c%s "$f" 2>/dev/null || echo 0)
+      [ "$got" -eq "$total" ] || die "size mismatch: got $got bytes, expected $total. Run it again (or press Download again) to resume"
+      [ "$got" -ge "$min" ] || die "$2 is smaller than expected ($min bytes): the profile and the file disagree"
+      ok "downloaded $f ($got bytes)"
+    }
+    if [ -n "${MTP_DONOR_URL:-}" ]; then
+      fetch "$MODEL_URL" "$BASE_FILE" "$MIN_BYTES"
+      if [ "$(stat -c%s "$MODEL_DIR/$MODEL_FILE" 2>/dev/null || echo 0)" -ge "$MIN_BYTES" ]; then
+        ok "already built: $MODEL_DIR/$MODEL_FILE"
+      else
+        space_for $(( $(stat -c%s "$MODEL_DIR/$BASE_FILE") / 1048576 + 5120 ))
+        [ -x "$VENV/bin/python" ] || die "no Python venv at $VENV. Run bin/install.sh first"
+        "$VENV/bin/python" -c 'import gguf' 2>/dev/null || { log "installing the gguf package into $VENV"
+          "$VENV/bin/pip" install -q gguf || die "could not install the gguf package"; }
+        log "adding the MTP layer to $BASE_FILE -> $MODEL_FILE (your $BASE_FILE is not modified)"
+        "$VENV/bin/python" "$REPO/bin/mtp-graft.py" "$MODEL_DIR/$BASE_FILE" "$MTP_DONOR_URL" "$MODEL_DIR/$MODEL_FILE" \
+          </dev/null || die "building $MODEL_FILE failed. Run the same command again"
+        ok "built $MODEL_DIR/$MODEL_FILE ($(stat -c%s "$MODEL_DIR/$MODEL_FILE") bytes)"
+      fi
+    else
+      fetch "$MODEL_URL" "$MODEL_FILE" "$MIN_BYTES"
+    fi
+    [ -n "${MMPROJ_URL:-}" ] && fetch "$MMPROJ_URL" "$MMPROJ_FILE" "${MMPROJ_MIN_BYTES:-1}"
+    ok "ready. Next: bin/model.sh use $new" ;;
   tune)
     # Adjust ONE profile's sampling, context or thinking. Writes config/tuning/<profile>.env with only what differs from
     # the shipped profile (models/ stays untouched), so each model keeps its own settings across switches. If the

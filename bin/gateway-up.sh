@@ -11,6 +11,8 @@
 #   * userTimezone: without it, timestamps are UTC and the agent says "good morning" at 9 pm.
 #   * a pinned auth token: a regenerated token makes the browser lose its pairing ("token mismatch").
 #   * gateway.bind stays loopback (the default). Windows reaches it through WSL's localhost forwarding.
+#   * input includes "image" only when llama is actually serving a vision projector: claiming it without one sends
+#     photos the model can't read, and leaving it out means OpenClaw never passes photos to the model at all.
 set -u
 . "$(dirname "$0")/lib.sh"
 load_profile || exit 1
@@ -22,12 +24,16 @@ flock -w 180 8 || die "another gateway-up is still running"
 oc() { openclaw config set "$@" >/dev/null 2>&1 || warn "config set failed: $*"; }
 
 log "configuring OpenClaw for profile $PROFILE (context $CTX)"
+# What llama reports it serves (/props), so the claim follows the running server; the profile is the fallback.
+vis=$(curl -s -m 5 "http://127.0.0.1:$LLAMA_PORT/props" 2>/dev/null | python3 -c   'import sys,json; print("yes" if json.load(sys.stdin).get("modalities",{}).get("vision") else "no")' 2>/dev/null)
+[ -n "$vis" ] || { vision_file_ok && vis=yes || vis=no; }
+INPUT='["text"]'; [ "$vis" = yes ] && INPUT='["text","image"]'
 oc gateway.mode local
 oc update.checkOnStart false     # no npm "new version" check on every start; the patches need exactly $OPENCLAW_VERSION anyway
 oc gateway.port "$GATEWAY_PORT"
 # The provider is written as ONE object: on a fresh config, setting `.api` alone fails validation until baseUrl and
 # models exist (found in a clean-machine rehearsal; it only "worked" on the second run, which hid it).
-oc models.providers.ollama "{\"baseUrl\":\"http://127.0.0.1:$SHIM_PORT/v1\",\"apiKey\":\"local-no-key\",\"api\":\"openai-completions\",\"models\":[{\"id\":\"$MODEL_ALIAS\",\"name\":\"$MODEL_ALIAS\",\"api\":\"openai-completions\",\"maxTokens\":$MAX_REPLY_TOKENS,\"contextWindow\":$CTX,\"input\":[\"text\"],\"cost\":{\"input\":0,\"output\":0,\"cacheRead\":0,\"cacheWrite\":0}}]}"
+oc models.providers.ollama "{\"baseUrl\":\"http://127.0.0.1:$SHIM_PORT/v1\",\"apiKey\":\"local-no-key\",\"api\":\"openai-completions\",\"models\":[{\"id\":\"$MODEL_ALIAS\",\"name\":\"$MODEL_ALIAS\",\"api\":\"openai-completions\",\"maxTokens\":$MAX_REPLY_TOKENS,\"contextWindow\":$CTX,\"input\":$INPUT,\"cost\":{\"input\":0,\"output\":0,\"cacheRead\":0,\"cacheWrite\":0}}]}"
 oc agents.defaults.model "ollama/$MODEL_ALIAS"
 oc agents.defaults.bootstrapMaxChars "$BOOTSTRAP_MAX_CHARS"
 [ -n "${USER_TIMEZONE:-}" ] && oc agents.defaults.userTimezone "$USER_TIMEZONE"

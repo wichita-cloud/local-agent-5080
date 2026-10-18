@@ -8,7 +8,11 @@ Several "obvious" optimizations turned out to be harmful. They're listed so you 
 
 | Setting | Use | Why (measured) |
 |---|---|---|
-| `-ctk q8_0 -ctv q8_0` | always | `-ctv q4_0` (quantized V) is unsupported on the GPU path for this architecture: **34 graph splits** instead of 2, so the GPU and CPU pass data back and forth on every step. Prefill went 1,895 → 94 tok/s; a ~17k cold prompt took 200-260 s instead of 9 s. Check `docker logs … \| grep "graph splits"` → 2. |
+| `-ctk q8_0 -ctv q8_0` | on the stack-wide pinned build (May 2026) | there, `-ctv q4_0` (quantized V) is unsupported on the GPU path for this architecture: **34 graph splits** instead of 2, so the GPU and CPU pass data back and forth on every step. Prefill went 1,895 → 94 tok/s; a ~17k cold prompt took 200-260 s instead of 9 s. Check `docker logs … \| grep "graph splits"` → 2. |
+| `-ctk q4_0 -ctv q4_0` | only with the newer build (b11277, the 64k and MTP profiles) | fixed upstream: 2 graph splits, same prefill speed as q8_0, half the cache memory. That is what makes 64k context (and room for MTP) fit. Long-context recall stayed 8/8 at a 57k-token prompt. **Never mix q8_0 K with q4_0 V**: that combination still takes a slow path (~60 tok/s prefill). |
+| `-fit off` | with the newer build | newer llama.cpp builds fit the model to free memory automatically, keeping a 1 GiB reserve. With `-ngl 99` forcing every layer onto the GPU, the fit fails ("failed to fit params to free device memory") and the model spills: prefill ~85 tok/s. With `-fit off` the newer build loads exactly like the old one. |
+| `--mmproj <file> --no-mmproj-offload` | for image understanding | keeps the vision encoder on the CPU: zero VRAM, text speed unchanged. With the encoder on the GPU, text decode spilled from ~20 to ~52 ms/token. An image costs ~800 tokens at 1024 px (~1,000 at OpenClaw's 1200 px limit) and ~10-20 s of CPU time. |
+| `--spec-type draft-mtp --spec-draft-n-max 3` | with a model that has an MTP layer (the `qwen3.5-27b-mtp` profile) | the model drafts 3 tokens per step with its own MTP layer and verifies them in one pass. Output is still the full model's (rejected drafts are discarded). Needs ~770 MB more VRAM than the same profile without it. Numbers: docs/MODELS.md. |
 | `-ngl 99` | always for the 27B | everything on the GPU |
 | `-t 8` + `--cpuset-cpus 0-7` | yes | match threads to the pinned cores. `-t 24` thrashed and gained nothing. |
 | `-ub 128` | at ≥32k context | the compute buffer scales with ub (128 → 124 MiB, 256 → 248). Prefill is barely affected (~1,700 vs ~2,000 tok/s); decode isn't affected at all. |
@@ -25,6 +29,7 @@ Several "obvious" optimizations turned out to be harmful. They're listed so you 
 | `--ctx-checkpoints 32 → 8` | 32 × 150 MB = 4.7 GB wasted | checkpoints are allocated on demand (in host RAM), one per 8,192 tokens, so 45k can only ever hold ~7. No change. |
 | `--cache-ram 8192 → 2048` | stop the container's RAM growing to ~8 GB | returning to a recent conversation went from **65 ms to 17.3 s**. The 8 GB is the prompt cache working, not a leak. |
 | bigger `-ub` for faster prefill | it should be | grew VRAM use toward 97% with no speed gain |
+| `--spec-type ngram-mod` (n-gram speculation, no extra model) | free speed-up | 12% of drafts accepted on agent-style text: no gain. MTP is the speculation that works here. |
 | "Prefer No Sysmem Fallback" (NVIDIA Control Panel) | stops silent spill | didn't, for WSL. See STABILITY.md |
 
 ## Prompt order: the biggest remaining lever for responsiveness

@@ -59,6 +59,9 @@ measured on that one.
 |---|---|
 | Default model | Qwen3.5-27B (dense), IQ4_XS quant, 32k context, fully on the GPU |
 | Speed (measured) | ~20 ms/token decode (~50 tok/s); ~1,650 tok/s prompt reading |
+| Faster: MTP profile | the same 27B with its multi-token-prediction layer: **~12 ms/token (~80 tok/s) for chat, ~130 tok/s for file edits**, same answers, 32k context (`qwen3.5-27b-mtp`; [docs/MODELS.md](docs/MODELS.md)) |
+| Longer: 64k profile | the same 27B at **64k context** with 4-bit cache, same chat speed ([docs/MODELS.md](docs/MODELS.md)) |
+| Sees images | the 64k and MTP profiles read photos and screenshots you send; the image encoder runs on the CPU, so it costs no GPU memory |
 | Web console | `http://localhost:18800`: is it running optimally, switch or download models, edit the agent's character |
 | Switching models | one click in the console, or `bin/model.sh use <profile>`; nothing else needs editing |
 | Voice (optional add-on) | the agent speaks in a voice you choose or clone from a 10-30 s recording; local, on spare CPU cores ([docs/VOICE.md](docs/VOICE.md)) |

@@ -15,12 +15,13 @@ Everything is bash and small Python programs. There is no build step, and every 
 | `config/secrets.env.example` | Optional API keys. Copied to `config/secrets.env` (git-ignored, mode 600). |
 | `bin/voice-install.sh`, `bin/voice.sh`, `services/voice_server.py` | Optional voice add-on (docs/VOICE.md): its own venv, CPU only on `VOICE_CPUSET`, OpenAI-style `/v1/audio/speech` on `VOICE_PORT`. Everything else checks `$VOICE_VENV/.installed` (written last by the installer) and skips voice when it isn't installed. |
 | `config/tuning/<profile>.env` | The user's per-model adjustments (sampling, context, thinking), layered over `models/<profile>.env` by `load_profile`. Written only by `bin/model.sh tune`. Git-ignored. |
-| `models/*.env` | One file per model profile: file name, context, batch sizes, sampling, expected speed. **The model is named here and nowhere else.** |
+| `models/*.env` | One file per model profile: file name, context, batch sizes, sampling, expected speed; optionally a vision projector (`MMPROJ_*`), an MTP source (`BASE_FILE`, `MTP_DONOR_URL`) and a pinned llama.cpp build (`LLAMA_IMAGE_PROFILE`). **The model is named here and nowhere else.** |
 | `bin/lib.sh` | Shared helpers sourced by every script: loads config, logging, `need_*` checks, port-owner lookup. |
 | `bin/install.sh` | One-time and re-runnable setup: apt, node, pinned openclaw, Python venv, patches, cron. |
 | `bin/up.sh` | Bring everything up in dependency order (used after a reboot). |
 | `bin/llama-up.sh` | Start the llama.cpp container for the active profile. Waits for VRAM, checks the file size, pins CPUs. |
-| `bin/model.sh` | `list`, `current`, `use <profile>` (switch + reconfigure + restart), `download <profile>`, `tune <profile> k=v…` (per-model adjustments, rollback on failure), `bench`. |
+| `bin/model.sh` | `list`, `current`, `use <profile>` (switch + reconfigure + restart), `download <profile>` (model, vision projector, MTP layer), `tune <profile> k=v…` (per-model adjustments, rollback on failure), `bench`. |
+| `bin/mtp-graft.py` | Adds a model's MTP layer (range-downloaded from an MTP build of the same model) to a GGUF that lacks it, as a new file. Called by `model.sh download` for profiles with `MTP_DONOR_URL`. |
 | `bin/console-up.sh` | Start the web console if it isn't running. |
 | `console/server.py` | :18800. The web console (Health / Models / Character). Standard library only, system python3. Runs `bin/` scripts as jobs; never holds logic the scripts don't have. See `docs/CONSOLE.md`. |
 | `console/index.html` | The console page. One file, vanilla JS, no build step. |
@@ -45,8 +46,11 @@ Everything is bash and small Python programs. There is no build step, and every 
 ## Invariants: do not break these without re-measuring
 Breaking any of these causes a failure that is easy to miss. The reasoning is in `docs/TUNING.md` and `docs/STABILITY.md`.
 
-1. **Never quantize the V cache on hybrid models** (Qwen3.5 / Gated-DeltaNet): `-ctv q4_0` caused 34 CPU graph
-   splits and 20× slower prefill. Keep `-ctk q8_0 -ctv q8_0`. Check `graph splits = 2` in `docker logs`.
+1. **The KV cache type depends on the llama.cpp build** (Qwen3.5 / Gated-DeltaNet is a hybrid architecture). On the
+   stack-wide pinned build (`LLAMA_IMAGE`), `-ctv q4_0` caused 34 CPU graph splits and 20× slower prefill: keep
+   `-ctk q8_0 -ctv q8_0`. Only profiles that pin the newer build (`LLAMA_IMAGE_PROFILE`, with `-fit off`) may use
+   q4_0, and then for K **and** V together: q8_0 K with q4_0 V takes a broken path (~60 tok/s prefill).
+   Check `graph splits = 2` in `docker logs`.
 2. **`CTX` and `UBATCH` are coupled.** A config that loads and reports healthy can still crash on the first long prompt.
    Proof of a config is `bin/bench.sh` with the large prompt, never a successful load.
 3. **The model is named only in `models/<profile>.env`**, and the alias every client uses (`MODEL_ALIAS`) never changes.
@@ -82,7 +86,7 @@ Breaking any of these causes a failure that is easy to miss. The reasoning is in
 ## How to test a change
 ```bash
 bash -n bin/*.sh guards/*.sh            # syntax
-python3 -m py_compile services/*.py console/server.py patches/openclaw-2026.3.11/*.py
+python3 -m py_compile services/*.py console/server.py bin/mtp-graft.py patches/openclaw-2026.3.11/*.py
 bin/verify.sh                           # every layer, exit 0 = all pass
 bin/bench.sh                            # speed is part of correctness here
 ```

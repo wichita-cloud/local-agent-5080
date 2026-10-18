@@ -257,7 +257,7 @@ def status():
     splits = cached("splits", 60, lambda: graph_splits(c)) if st == "running" else None
     add("Model", "fully on the GPU (graph splits)", "ok" if splits is not None and splits <= 4 else ("skip" if splits is None else "fail"),
         f"graph splits = {splits}" if splits is not None else "unknown",
-        "" if splits is None or splits <= 4 else "Part of the model is on the CPU: KV_ARGS must be q8_0/q8_0; check free VRAM.")
+        "" if splits is None or splits <= 4 else "Part of the model is on the CPU: check KV_ARGS (docs/TUNING.md) and free VRAM.")
 
     # 4 services
     for name, port in (("memory service", c.get("MEMORY_PORT", 5766)), ("memory proxy", c.get("RAG_PORT", 9081))):
@@ -376,7 +376,8 @@ def status():
 
 # ── models ───────────────────────────────────────────────────────────────────────────────────────────────────────
 PROFILE_KEYS = ["DESCRIPTION", "MODEL_FILE", "MIN_BYTES", "MODEL_URL", "CTX", "UBATCH", "BATCH", "KV_ARGS", "SAMPLING",
-                "REASONING", "EXTRA_ARGS", "MIN_FREE_MIB", "EXPECT_DECODE_MS", "EXPECT_PREFILL_TPS", "MEASURED"]
+                "REASONING", "EXTRA_ARGS", "MIN_FREE_MIB", "EXPECT_DECODE_MS", "EXPECT_PREFILL_TPS", "MEASURED",
+                "MMPROJ_FILE", "MMPROJ_MIN_BYTES", "BASE_FILE"]
 
 
 TUNE_FLAGS = {"temp": "--temp", "top_p": "--top-p", "top_k": "--top-k", "min_p": "--min-p",
@@ -435,11 +436,19 @@ def profiles():
         p["size"] = size
         p["present"] = size >= int(p["MIN_BYTES"] or 1)
         p["partial"] = 0 < size < int(p["MIN_BYTES"] or 1)
+        # a profile that can see images also needs its vision projector; "Download" fetches whatever is missing
+        if p["MMPROJ_FILE"]:
+            try:
+                vsize = os.path.getsize(os.path.join(mdir, p["MMPROJ_FILE"]))
+            except OSError:
+                vsize = 0
+            p["vision_ready"] = vsize >= int(p["MMPROJ_MIN_BYTES"] or 1)
+            p["present"] = p["present"] and p["vision_ready"]
         # a full, passing benchmark on THIS machine counts as measured, whatever the shipped profile says
         p["benched"] = ({"decode_ms": lb.get("decode_ms"), "prefill_tps": lb.get("prefill_tps"), "ts": lb.get("ts")}
                         if lb.get("profile") == name and lb.get("rc") == 0 and not lb.get("quick") else None)
         out.append(p)
-    used = {p["MODEL_FILE"] for p in out}
+    used = {p[k] for p in out for k in ("MODEL_FILE", "MMPROJ_FILE", "BASE_FILE") if p.get(k)}
     try:
         orphans = sorted(f for f in os.listdir(mdir) if f.endswith(".gguf") and f not in used)
     except OSError:

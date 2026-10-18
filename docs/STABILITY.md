@@ -11,6 +11,9 @@ else may use the card.** Almost every serious stability or speed problem on a 16
 | KV cache | ~34 per 1k tokens of context | only 16 of the model's 64 blocks have a KV cache (it's a hybrid) |
 | ↳ at 32k context (default) | 1,088 | |
 | ↳ at 45k context | 1,496 | |
+| ↳ at 64k with a 4-bit cache (`q4_0`, newer build only) | ~1,150 | half of q8_0's ~34 per 1k tokens |
+| MTP layer + its working memory (MTP profile) | ~770 | why MTP fits at 32k but not 45k |
+| Vision encoder (64k, MTP profiles) | 0 | runs on the CPU; ~630 MB of system RAM instead |
 | Recurrent state | 150 | |
 | Compute buffer | 124 at `-ub 128` | scales with UBATCH |
 | CUDA memory pool growth under load | +100 to +200 | grows lazily during long prompts; a load report never shows it |
@@ -20,8 +23,11 @@ else may use the card.** Almost every serious stability or speed problem on a 16
 |---|---|---|
 | 32k context (default) | ~700 | ~500 |
 | 45k context | ~300 | **160–210, below the 250 floor** |
+| 64k, 4-bit cache | ~570 | ~570 (after a 57k-token prompt) |
+| MTP, 32k, 4-bit cache | ~400 | ~400 (after a 29k-token prompt) |
 
-That's why the default is 32k. The 45k profile works, but it lives on the edge: in testing, a genuine
+That's why the default is 32k, and why long context now comes from the 64k profile's 4-bit cache rather than from
+squeezing q8_0. The 45k profile works, but it lives on the edge: in testing, a genuine
 ~40k-token prompt at 48k context crashed mid-read with `CUDA error: device not ready` as the memory pool tried
 to grow.
 
@@ -73,7 +79,9 @@ bin/bench.sh                   # confirm ~20 ms/token
 Spilled memory doesn't move back on its own. The model must be restarted after VRAM is freed.
 
 ## Other stability rules (each one broke things once)
-- **Never `-ctv q4_0`** (quantized V cache) on Qwen3.5. Graph splits go 2 → 34 and prompt reading drops 20×. See TUNING.md.
+- **No `-ctv q4_0`** (quantized V cache) on Qwen3.5 **with the stack-wide pinned build**: graph splits go 2 → 34 and prompt
+  reading drops 20×. The newer build used by the 64k and MTP profiles handles q4_0 K+V correctly (never q8_0 K with q4_0 V). See TUNING.md.
+- **The newer build needs `-fit off`.** Without it, it reserves 1 GiB, fails to fit, and spills (prompt reading ~85 tok/s).
 - **`CTX` and `UBATCH` are coupled.** 45k context with `-ub 256` loads fine and then fails 9 out of 9 real prompts; `-ub 128` passed 9 of 9.
 - **A successful load proves nothing.** Only a large, uncacheable prompt does (`bin/bench.sh`).
 - **One model, one place.** The profile file is the only place a model is named. With two copies of a launch command,

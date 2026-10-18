@@ -46,6 +46,17 @@ sleep 2
 # Thinking on: route the thoughts to their own field (deepseek format), or <think> text leaks into replies (docs/TUNING.md)
 RFMT=""; [ "$REASONING" = on ] && ! printf '%s' "$EXTRA_ARGS" | grep -q -- '--reasoning-format' && RFMT="--reasoning-format deepseek"
 
+# Image understanding. The vision encoder ALWAYS runs on the CPU (--no-mmproj-offload): it then costs no VRAM.
+# On the GPU it takes ~600 MB the 27B doesn't have, and text decode spilled from ~20 to ~52 ms/token.
+VISION=""
+if vision_file_ok; then
+  VISION="--mmproj /models/$MMPROJ_FILE --no-mmproj-offload"
+  ok "images: on ($MMPROJ_FILE, encoder on the CPU)"
+elif [ -n "${MMPROJ_FILE:-}" ]; then
+  warn "images: off. $MMPROJ_FILE is missing; run bin/model.sh download $PROFILE to add it (text works without it)"
+fi
+[ "$LLAMA_IMAGE" != "$STACK_LLAMA_IMAGE" ] && log "this profile pins its own llama.cpp build: $LLAMA_IMAGE"
+
 # shellcheck disable=SC2086   # word-splitting of the *_ARGS strings is intended
 docker run -d --name "$LLAMA_CONTAINER" \
   --restart unless-stopped \
@@ -56,7 +67,7 @@ docker run -d --name "$LLAMA_CONTAINER" \
   --health-interval 30s --health-start-period 180s \
   -v "$MODEL_DIR":/models:ro \
   "$LLAMA_IMAGE" \
-  -m "/models/$MODEL_FILE" \
+  -m "/models/$MODEL_FILE" $VISION \
   --host 0.0.0.0 --port "$LLAMA_PORT" \
   -ngl "$GPU_LAYERS" -c "$CTX" -t "$THREADS" --parallel 1 \
   -b "$BATCH" -ub "$UBATCH" \
@@ -70,7 +81,7 @@ for i in $(seq 1 300); do
     ok "serving after ${i}s"
     splits=$(docker logs "$LLAMA_CONTAINER" 2>&1 | grep -oE 'graph splits = [0-9]+' | tail -1 | grep -oE '[0-9]+$')
     if [ -n "$splits" ] && [ "$splits" -gt 4 ]; then
-      warn "graph splits = $splits (expect ~2). Part of the model is running on the CPU. Check KV_ARGS (never -ctv q4_0) and free VRAM."
+      warn "graph splits = $splits (expect ~2). Part of the model is running on the CPU. Check KV_ARGS (see docs/TUNING.md: q4_0 V only on the newer build, never q8_0 K with q4_0 V) and free VRAM."
     else
       ok "graph splits = ${splits:-?}"
     fi
