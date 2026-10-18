@@ -27,6 +27,28 @@ The browser dashboard (`:18789`) shows text only. It has no audio player; use th
 Speech starts after the text reply is finished. Long replies are spoken in sentence-sized pieces, and OpenClaw
 summarizes replies over 1,500 characters before speaking them in messaging apps.
 
+### Time from question to first spoken answer, with memory (measured)
+Suggested on the Hugging Face forum: decode speed alone doesn't say which model *feels* best as a voice assistant.
+Setup (2026-10-18, RTX 5080 + 9900X): 12 questions about facts stored in the memory service, among ~250 other
+memories, including a near-miss distractor for each fact (the sister's birthday vs a coworker's with the same name;
+the cabin's wifi password vs the home one). Retrieval ran once through the real memory service and memory proxy code
+(right fact retrieved 12/12, distractor alongside it in 10/12), then the same retrieved memories were given to every
+model. Each answer was spoken with `nano`. Medians:
+
+| Model profile | Right memory used | Memory lookup | First token | Full text answer | Speaking it | **First audio** |
+|---|---|---|---|---|---|---|
+| `qwen3.5-27b-iq4xs` | 12/12 (0 wrong) | 0.25 s | 0.30 s | 0.74 s | 3.3 s | **~4.2 s** |
+| `qwen3.5-27b-mtp` | 12/12 (0 wrong) | 0.25 s | 0.28 s | 0.50 s | 3.1 s | **~3.8 s** |
+| `qwen3-14b-q4km` | 12/12 (0 wrong) | 0.25 s | 0.11 s | 0.39 s | 2.8 s | **~3.4 s** |
+| `qwen3-8b-q4km` | 12/12 (0 wrong) | 0.25 s | 0.15 s | 0.32 s | 2.8 s | **~3.4 s** |
+
+What it shows: for short spoken answers (15-21 tokens, ~4 s of audio), **the voice is ~80% of the wait**. The models
+differ by under half a second, and all four used the right memory every time. On this test the 27B costs ~0.8 s more
+than the 8B, and MTP halves that gap. The questions were easy enough that every model got them all; harder ones
+(several memories that must be combined, or a memory that should be ignored) are where the models will separate.
+Lower first-audio time would come from the voice side: speaking the first sentence while the rest is still being
+written, or a faster voice engine.
+
 ## Adding a voice
 Console → Voice → **Add a voice**: a name, a recording, and the consent box. Or from a terminal:
 ```bash

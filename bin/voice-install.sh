@@ -36,8 +36,11 @@ log "3/5 voice venv ($VOICE_VENV)"
 rm -f "$VOICE_VENV/.installed"
 [ -x "$VOICE_VENV/bin/python3" ] || python3 -m venv "$VOICE_VENV" || die "venv creation failed"
 VP="$VOICE_VENV/bin/python3"
-if ! "$VP" -c "import chatterbox.tts_turbo as t, inspect; assert 'nano' in inspect.signature(t.ChatterboxTurboTTS.from_pretrained).parameters" 2>/dev/null; then
+if ! "$VP" -c "import chatterbox.tts_turbo as t, inspect, pkg_resources; assert 'nano' in inspect.signature(t.ChatterboxTurboTTS.from_pretrained).parameters" 2>/dev/null; then
   "$VOICE_VENV/bin/pip" install -q --upgrade pip
+  # resemble-perth (Chatterbox's watermark) still imports pkg_resources, which setuptools removed in 81. Ubuntu 22.04's
+  # venv ships an old setuptools, so it works there; a newer or missing one (e.g. Python 3.12) fails at model load.
+  "$VOICE_VENV/bin/pip" install -q "setuptools<81" || die "setuptools install failed"
   "$VOICE_VENV/bin/pip" install -q "torch==$TORCH_VERSION" "torchaudio==$TORCH_VERSION" --index-url https://download.pytorch.org/whl/cpu \
     || die "PyTorch (CPU) install failed"
   "$VOICE_VENV/bin/pip" install -q "chatterbox-tts==$CHATTERBOX_VERSION" || die "chatterbox-tts install failed"
@@ -51,7 +54,7 @@ log "4/5 model weights ($VOICE_ENGINE; first time downloads ~1-2 GB)"
 CUDA_VISIBLE_DEVICES="" "$VP" -c "
 from chatterbox.tts_turbo import ChatterboxTurboTTS
 ChatterboxTurboTTS.from_pretrained(device='cpu', nano=('$VOICE_ENGINE' == 'nano'))" >/dev/null 2>&1 \
-  || die "could not download/load the voice model (network, or disk). Re-run this script"
+  || die "could not download/load the voice model (network, disk, or a broken package: run the same python line by hand to see the error). Re-run this script"
 ok "weights cached"
 touch "$VOICE_VENV/.installed"
 
