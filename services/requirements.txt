@@ -1,0 +1,4 @@
+# Installed into the venv by bin/install.sh (after CPU-only torch). Loose pins = the versions this was run with.
+chromadb>=0.5,<1.1
+sentence-transformers>=3.0
+requests>=2.31

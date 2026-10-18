@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Console</title>
+<!--
+  The console page. Plain HTML + vanilla JS, no build step and no external files, so it works offline and any
+  coding tool can read it top to bottom. All data comes from console/server.py (/api/*). Every button that changes
+  something runs a bin/ script as a "job" and streams its output into the Activity panel.
+-->
+<style>
+:root{
+  --bg:#f6f5f2;--panel:#ffffff;--fg:#1c1b19;--mut:#6a665f;--line:#e2ded6;--soft:#efece6;
+  --acc:#2f5bd3;--ok:#1f7a4a;--okbg:#e4f3ea;--warn:#9a6200;--warnbg:#fbf0dc;--bad:#b42318;--badbg:#fbe5e2;
+  --info:#55606e;--infobg:#eceff3;--mono:ui-monospace,SFMono-Regular,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141414;--panel:#1d1d1c;--fg:#ecebe8;--mut:#9c978e;--line:#33312d;--soft:#262523;
+  --acc:#86a5ff;--ok:#5fd394;--okbg:#17301f;--warn:#f0b54a;--warnbg:#33280f;--bad:#ff8a7a;--badbg:#3a1a16;
+  --info:#a9b3c1;--infobg:#242a31}}
+:root[data-theme="dark"]{
+  --bg:#141414;--panel:#1d1d1c;--fg:#ecebe8;--mut:#9c978e;--line:#33312d;--soft:#262523;
+  --acc:#86a5ff;--ok:#5fd394;--okbg:#17301f;--warn:#f0b54a;--warnbg:#33280f;--bad:#ff8a7a;--badbg:#3a1a16;
+  --info:#a9b3c1;--infobg:#242a31}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.bar{max-width:1100px;margin:0 auto;padding:12px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.brand{font-weight:650;letter-spacing:-.01em}
+nav{display:flex;gap:4px;margin-left:auto}
+nav button{background:none;border:0;color:var(--mut);font:inherit;padding:7px 12px;border-radius:8px;cursor:pointer}
+nav button[aria-selected="true"]{background:var(--soft);color:var(--fg);font-weight:600}
+main{max-width:1100px;margin:0 auto;padding:18px 16px 60px}
+section[hidden]{display:none}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+h2{font-size:15px;margin:0 0 10px;font-weight:650}
+h3{font-size:14px;margin:14px 0 6px}
+.mut{color:var(--mut)}.small{font-size:13px}.mono{font-family:var(--mono);font-size:13px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:13px;font-weight:600;white-space:nowrap}
+.pill::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.s-ok,.s-optimal{color:var(--ok);background:var(--okbg)}
+.s-fail,.s-down{color:var(--bad);background:var(--badbg)}
+.s-degraded,.s-wait{color:var(--warn);background:var(--warnbg)}
+.s-skip,.s-unknown,.s-paused{color:var(--info);background:var(--infobg)}
+.verdict{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.verdict .big{font-size:22px;font-weight:700;letter-spacing:-.01em}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-top:14px}
+.stat{background:var(--soft);border-radius:10px;padding:10px 12px}
+.stat .k{font-size:12px;color:var(--mut)}.stat .v{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums}
+.stat .d{font-size:12px;color:var(--mut)}
+.meter{height:6px;background:var(--line);border-radius:3px;margin-top:6px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--acc)}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+button.b{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--panel);color:var(--fg);padding:7px 12px;border-radius:8px;cursor:pointer}
+button.b:hover{border-color:var(--acc)}
+button.b.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+:root[data-theme="dark"] button.b.pri{color:#111}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) button.b.pri{color:#111}}
+button.b:disabled{opacity:.5;cursor:default}
+table{width:100%;border-collapse:collapse}
+td,th{padding:7px 8px;border-top:1px solid var(--line);vertical-align:top;text-align:left;font-size:14px}
+th{font-size:12px;color:var(--mut);font-weight:600;border-top:0}
+td.layer{color:var(--mut);white-space:nowrap;font-size:13px}
+.fix{color:var(--mut);font-size:13px;margin-top:2px}
+.scroll{overflow-x:auto}
+#chart svg{width:100%;height:170px;display:block}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:820px){.grid2{grid-template-columns:1fr}nav{margin-left:0}}
+.model{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;border-top:1px solid var(--line);padding:12px 0}
+.model:first-of-type{border-top:0}
+.model .name{font-weight:650}.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.tag{font-size:12px;padding:1px 8px;border-radius:6px;background:var(--soft);color:var(--mut)}
+.tag.on{background:var(--okbg);color:var(--ok)}.tag.no{background:var(--badbg);color:var(--bad)}.tag.w{background:var(--warnbg);color:var(--warn)}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+input,select,textarea{width:100%;font:inherit;font-size:14px;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+textarea{line-height:1.45;resize:vertical}
+#editor{min-height:420px;font-family:var(--mono);font-size:13px}
+.files{display:flex;flex-direction:column;gap:4px}
+.files button{display:flex;justify-content:space-between;gap:8px;text-align:left;font:inherit;font-size:14px;background:none;border:1px solid transparent;color:var(--fg);padding:7px 9px;border-radius:8px;cursor:pointer}
+.files button[aria-selected="true"]{background:var(--soft);border-color:var(--line)}
+.files .dirty::after{content:" •";color:var(--warn)}
+.charlayout{display:grid;grid-template-columns:240px 1fr;gap:16px}
+@media (max-width:820px){.charlayout{grid-template-columns:1fr}}
+#activity{position:fixed;right:16px;bottom:16px;width:min(560px,calc(100vw - 32px));background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.18);z-index:9}
+#activity header{position:static;display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);background:none}
+#activity pre{margin:0;max-height:300px;overflow:auto;padding:10px 12px;font:12px/1.45 var(--mono);white-space:pre-wrap}
+#activity.min pre{display:none}
+.toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:14px;z-index:20}
+.note{background:var(--soft);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--mut);margin-top:10px}
+details summary{cursor:pointer;color:var(--acc);font-size:14px}
+.model>div:first-child{flex:1;min-width:0}
+details.adv{margin-top:8px}details.adv summary{font-size:13px;color:var(--mut)}
+.advbox{margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--soft)}
+.advrow{display:grid;grid-template-columns:150px 110px 1fr;gap:4px 12px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
+.advrow:first-of-type{border-top:0}.advrow label{margin:0;font-size:13px;font-weight:600}
+.advrow input,.advrow select{padding:4px 7px}.advrow.changed label::after{content:" •";color:var(--warn)}
+@media (max-width:640px){.advrow{grid-template-columns:1fr 110px}.advrow .small{grid-column:1/-1}}
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <span class="brand">Agent Console</span>
+  <span id="hdrPill" class="pill s-unknown">…</span>
+  <span id="hdrModel" class="mut small"></span>
+  <nav role="tablist">
+    <button role="tab" data-tab="health" aria-selected="true">Health</button>
+    <button role="tab" data-tab="models" aria-selected="false">Models</button>
+    <button role="tab" data-tab="character" aria-selected="false">Character</button>
+    <button role="tab" data-tab="voice" aria-selected="false">Voice</button>
+  </nav>
+</div></header>
+
+<main>
+<!-- ═══════════════════════════════ HEALTH ═══════════════════════════════ -->
+<section id="tab-health">
+  <div class="card">
+    <div class="verdict">
+      <span id="vPill" class="pill s-unknown">checking</span>
+      <span id="vText" class="big">Checking…</span>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="btns">
+      <button class="b pri" data-job="bench">Run benchmark (~30 s)</button>
+      <button class="b" data-job="bench" data-quick="1">Quick speed check</button>
+      <button class="b" data-job="verify">Full verify</button>
+      <button class="b" data-job="up" title="bin/up.sh: starts whatever is down, in order, then verifies">Bring everything up</button>
+    </div>
+    <p class="small mut" id="updated"></p>
+  </div>
+
+  <div class="card">
+    <h2>Speed history <span class="mut small">(daily median decode from real traffic; lower is faster)</span></h2>
+    <div id="chart"></div>
+  </div>
+
+  <div class="card">
+    <h2>Checks, in dependency order</h2>
+    <p class="small mut" style="margin-top:-4px">Fix the <b>first</b> failing row. Rows below it usually fail because of it.</p>
+    <div class="scroll"><table id="checks"><thead><tr><th>Layer</th><th>Check</th><th>State</th><th>Detail</th></tr></thead><tbody></tbody></table></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════ MODELS ═══════════════════════════════ -->
+<section id="tab-models" hidden>
+  <div class="card">
+    <h2>Model profiles</h2>
+    <p class="small mut" style="margin-top:-4px">Each profile is one file in <span class="mono">models/</span>. Switching relaunches the model,
+      rewrites the agent's config to match, and benchmarks it (1–3 minutes; chat pauses meanwhile). If the new model fails to start,
+      it rolls back automatically.</p>
+    <div id="models"></div>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <h2>Add a model</h2>
+      <p class="small mut" style="margin-top:-4px">Creates <span class="mono">models/&lt;name&gt;.env</span> from an existing profile. Pick the base
+        closest to your model (same family is best). Then download it, switch to it and benchmark.</p>
+      <label for="nmName">Profile name</label><input id="nmName" placeholder="e.g. qwen3-14b-q5km">
+      <label for="nmDesc">Description</label><input id="nmDesc" placeholder="Qwen3-14B Q5_K_M, 32k context">
+      <label for="nmFile">Model file (.gguf)</label><input id="nmFile" list="orphans" placeholder="Qwen3-14B-Q5_K_M.gguf">
+      <datalist id="orphans"></datalist>
+      <label for="nmUrl">Download link (optional, Hugging Face "resolve/main" link)</label>
+      <input id="nmUrl" placeholder="https://huggingface.co/<org>/<repo>/resolve/main/<file>.gguf">
+      <div class="grid2" style="gap:10px">
+        <div><label for="nmCtx">Context (tokens)</label><input id="nmCtx" value="32768"></div>
+        <div><label for="nmBase">Copy settings from</label><select id="nmBase"></select></div>
+      </div>
+      <label for="nmMin">Minimum file size in bytes (catches truncated downloads; ~97% of the real size)</label><input id="nmMin" placeholder="e.g. 9000000000">
+      <div class="btns"><button class="b pri" id="nmGo">Create profile</button></div>
+      <p class="small" id="fitHint"></p>
+    </div>
+    <div class="card">
+      <h2>What fits on a 16 GB card</h2>
+      <table class="small">
+        <tr><th>Model size</th><th>Typical file</th><th>Context that fits</th></tr>
+        <tr><td>8B</td><td>Q4_K_M ≈ 5 GB · Q8_0 ≈ 9 GB</td><td>64k+ (fast, weaker at tools)</td></tr>
+        <tr><td>12–14B</td><td>Q4_K_M ≈ 9 GB · Q6_K ≈ 12 GB</td><td>32k–64k</td></tr>
+        <tr><td>27B dense</td><td>IQ4_XS ≈ 13–15 GB</td><td>32k–45k (the default)</td></tr>
+        <tr><td>30–35B MoE</td><td>IQ4_XS ≈ 17–18 GB</td><td>needs some experts on the CPU</td></tr>
+      </table>
+      <div class="note">Rule: file size + context memory + ~0.5 GB must stay under ~15.5 GB. If it doesn't fit, the model
+        silently spills into system RAM and runs ~6× slower; the Health tab will flag it. Benchmark every new profile, then put
+        its numbers into <span class="mono">EXPECT_DECODE_MS</span> / <span class="mono">EXPECT_PREFILL_TPS</span> so "optimal" means something.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════ CHARACTER ═══════════════════════════════ -->
+<section id="tab-character" hidden>
+  <div class="card">
+    <h2>The agent's character</h2>
+    <p class="small mut" style="margin-top:-4px">These files are added to <b>every</b> prompt the agent sees. They're plain Markdown in
+      <span class="mono" id="wsPath"></span>. Edits apply from the next message. For a clean start without the old personality
+      lingering in the conversation, type <span class="mono">/new</span> in the chat.</p>
+    <div class="charlayout">
+      <div>
+        <div class="files" id="fileList"></div>
+        <p class="small mut" id="tokTotal"></p>
+        <div class="btns"><button class="b pri" id="saveChar" disabled>Save changes</button><button class="b" id="revertChar" disabled>Revert</button></div>
+      </div>
+      <div>
+        <p class="small mut" id="fileHelp" style="margin:0 0 6px"></p>
+        <textarea id="editor" spellcheck="true" aria-label="file contents"></textarea>
+        <p class="small mut" id="fileCount"></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Quick builder</h2>
+      <p class="small mut" style="margin-top:-4px">Fill in what you like. It drafts IDENTITY.md, SOUL.md and USER.md, and you review them
+        in the editor before saving.</p>
+      <div class="grid2" style="gap:10px">
+        <div><label for="qName">Agent name</label><input id="qName" placeholder="e.g. Atlas"></div>
+        <div><label for="qEmoji">Emoji (optional)</label><input id="qEmoji" placeholder="🧭"></div>
+      </div>
+      <label for="qRole">Role, in one line</label><input id="qRole" placeholder="a research assistant who keeps my projects organized">
+      <label for="qPers">Personality</label><textarea id="qPers" rows="3" placeholder="curious, direct, a dry sense of humor; admits uncertainty"></textarea>
+      <label for="qStyle">How it talks</label><textarea id="qStyle" rows="2" placeholder="short answers first, details on request; no filler"></textarea>
+      <label for="qAlways">Always…</label><textarea id="qAlways" rows="2" placeholder="cite sources for facts from the web; save important decisions to memory"></textarea>
+      <label for="qNever">Never…</label><textarea id="qNever" rows="2" placeholder="delete files without asking; make up quotes or numbers"></textarea>
+      <h3>About you</h3>
+      <div class="grid2" style="gap:10px">
+        <div><label for="qUser">What to call you</label><input id="qUser"></div>
+        <div><label for="qTz">Your timezone</label><input id="qTz" placeholder="Europe/London"></div>
+      </div>
+      <label for="qAbout">Anything it should know about you</label><textarea id="qAbout" rows="2"></textarea>
+      <div class="btns"><button class="b pri" id="qGo">Draft into the editor</button></div>
+    </div>
+
+    <div class="card">
+      <h2>Presets</h2>
+      <p class="small mut" style="margin-top:-4px">Ready-made characters in <span class="mono">characters/</span>. Loading one replaces the
+        current files; a backup is taken first. Saving a preset never includes USER.md, so presets are safe to share.</p>
+      <div id="presets"></div>
+      <label for="pName">Save the current character as a preset</label>
+      <div style="display:flex;gap:8px"><input id="pName" placeholder="my-character"><button class="b" id="pSave">Save</button></div>
+      <h3>Backups</h3>
+      <p class="small mut" style="margin:0 0 6px">Taken automatically before every save, preset load or restore.</p>
+      <div id="backups" class="small"></div>
+      <h3>Memory</h3>
+      <p class="small mut" id="memInfo" style="margin:0"></p>
+      <div class="btns"><button class="b" data-job="ingest">Re-index the notes folder now</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════ VOICE ═══════════════════════════════ -->
+<section id="tab-voice" hidden>
+  <div class="card" id="vNotInstalled" hidden>
+    <h2>Give the agent a voice (optional)</h2>
+    <p class="small">Adds local text-to-speech with voice cloning: Chatterbox by Resemble AI, MIT licensed, running on the CPU
+      cores the model doesn't use. Nothing leaves this PC, and no account or key is needed.</p>
+    <p class="small mut">About 4 GB of disk and 5 minutes. Speed on a 9900X: a 10-second reply takes about 7 seconds to speak.</p>
+    <div class="btns"><button class="b pri" data-job="voice-install">Install voice</button></div>
+  </div>
+
+  <div id="vInstalled" hidden>
+    <div class="card">
+      <h2>Voices</h2>
+      <p class="small mut" style="margin-top:-4px" id="vStatus"></p>
+      <div id="vList"></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2>Add a voice</h2>
+        <p class="small mut" style="margin-top:-4px">A clean 10–30 second recording of one person speaking naturally. It's cleaned up
+          automatically (trimmed, levelled, converted). See <b>Recording a good clip</b> below.</p>
+        <label for="vName">Name</label><input id="vName" placeholder="e.g. my-voice">
+        <label for="vFile">Recording (.wav, .mp3, .m4a, .flac, .ogg)</label><input id="vFile" type="file" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg">
+        <label style="display:flex;gap:8px;align-items:flex-start;font-weight:400;margin-top:12px">
+          <input type="checkbox" id="vConsent" style="width:auto;margin-top:3px">
+          <span class="small">This is my own voice, or the speaker has given me permission to clone it.</span></label>
+        <div class="btns"><button class="b pri needsidle" id="vAdd">Add voice</button></div>
+        <p class="small mut">Every clip the voice makes carries an inaudible watermark (Resemble AI's Perth), so it can be identified as
+          synthetic. Don't use a cloned voice to impersonate anyone.</p>
+      </div>
+
+      <div class="card">
+        <h2>Try it</h2>
+        <label for="vSay">Text</label>
+        <textarea id="vSay" rows="3">Hello! This is how I'll sound when I read my replies to you.</textarea>
+        <div class="btns"><button class="b" id="vSpeak">Speak</button></div>
+        <h3>Talk to your agent</h3>
+        <p class="small mut" style="margin:0 0 6px">Type a message; the reply is shown and read aloud in the agent's voice. This uses its own
+          conversation, separate from the dashboard.</p>
+        <div style="display:flex;gap:8px"><input id="vMsg" placeholder="Ask me anything"><button class="b pri" id="vSend">Send</button></div>
+        <div id="vReply" class="note" hidden></div>
+        <audio id="vAudio" controls style="width:100%;margin-top:10px" hidden></audio>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <details><summary>Recording a good clip (with Audacity, free)</summary>
+      <ol class="small" style="line-height:1.6">
+        <li><b>Set up.</b> In Audacity: <i>Audio Setup → Recording Device</i> = your microphone, and <i>Audio Setup → Recording Channels</i> =
+          1 (Mono). Sit 15–20 cm from the mic, in a quiet room with soft furnishings (less echo).</li>
+        <li><b>Record.</b> Press Record, stay silent for 3 seconds (that's "room tone"), then read for 20–30 seconds in your normal
+          speaking voice: varied sentences, not a list. Keep the level meter peaking around −12 to −6 dB, never in the red.</li>
+        <li><b>Remove background noise.</b> Select the 3 silent seconds → <i>Effect → Noise Removal and Repair → Noise Reduction →
+          Get Noise Profile</i>. Then select all (Ctrl+A) → the same effect again → OK (the default 12 dB is fine; more sounds robotic).</li>
+        <li><b>Cut</b> the silent start, coughs and mistakes: select them and press Delete.</li>
+        <li><b>Even out the level.</b> <i>Effect → Volume and Compression → Normalize</i>, peak −1 dB.</li>
+        <li><b>Export.</b> <i>File → Export Audio</i> → WAV, 16-bit, mono. Then add it above.</li>
+      </ol>
+      <p class="small mut">Avoid music or other voices in the background, echoey rooms, phone-call recordings, and heavy effects: the clone
+        copies the recording's sound as well as the voice. Full guide: <span class="mono">docs/VOICE.md</span>.</p>
+    </details>
+  </div>
+</section>
+</main>
+
+<div id="activity" hidden>
+  <header><b id="actTitle">Activity</b><span id="actState" class="pill s-wait">running</span>
+    <span style="margin-left:auto"></span>
+    <button class="b" id="actMin">Hide output</button><button class="b" id="actClose">Close</button></header>
+  <pre id="actLog"></pre>
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} :
+    {method: "POST", headers: {"Content-Type": "application/json", "X-Console": "1"}, body: JSON.stringify(body)});
+  const j = await r.json().catch(() => ({error: "bad response"}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+function toast(msg) { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
+  document.body.append(t); setTimeout(() => t.remove(), 3200); }
+const LABEL = {ok: "ok", fail: "fail", wait: "loading", skip: "no data",
+  optimal: "Optimal", degraded: "Degraded", down: "Down", unknown: "Unconfirmed", paused: "Paused"};
+
+/* ── tabs ── */
+let tab = "health";
+function showTab(t) {
+  tab = t;
+  $$("nav button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === t));
+  $$("main > section").forEach(s => s.hidden = s.id !== "tab-" + t);
+  try { localStorage.setItem("console.tab", t); } catch (e) {}
+  if (location.hash !== "#" + t) history.replaceState(null, "", "#" + t);
+  if (t === "models") loadModels(); if (t === "character") loadCharacter(); if (t === "voice") loadVoice();
+}
+$$("nav button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+
+/* ── health ── */
+async function loadStatus() {
+  let s; try { s = await api("/api/status"); } catch (e) { $("#vText").textContent = "Console can't reach its server: " + e.message; return; }
+  for (const el of [$("#vPill"), $("#hdrPill")]) { el.className = "pill s-" + s.verdict; el.textContent = LABEL[s.verdict]; }
+  $("#vText").textContent = s.summary;
+  $("#hdrModel").textContent = s.profile ? "model: " + s.profile : "";
+  const g = s.gpu || {}, ex = s.expect || {}, d = s.decode || {}, b = s.bench;
+  const sp = s.checks.find(c => c.name === "decode speed vs profile");
+  const spill = s.checks.find(c => c.name === "model spill into system RAM");
+  const usedPct = g.total_mib ? Math.round(100 * g.used_mib / g.total_mib) : 0;
+  $("#stats").innerHTML = [
+    stat("Reply speed", sp && sp.state !== "skip" ? (sp.detail.match(/\((\d+) tok\/s\)/) || [, "?"])[1] + " tok/s" : "—",
+         (sp && sp.state !== "skip" ? sp.detail.split(" (")[0] + " · " : "") + (ex.decode_ms ? `expected ~${ex.decode_ms} ms/token` : "")),
+    stat("Prompt reading", b && b.prefill_tps ? b.prefill_tps.toLocaleString() + " tok/s" : "—",
+         (ex.prefill_tps ? `expected ~${ex.prefill_tps.toLocaleString()} · ` : "") + (b ? "last benchmark" : "run a benchmark")),
+    stat("GPU memory free", g.free_mib != null ? Math.round(g.free_mib) + " MiB" : "—",
+         g.total_mib ? `${Math.round(g.used_mib)} of ${Math.round(g.total_mib)} MiB used` : "", usedPct),
+    stat("Spill to system RAM", spill ? spill.detail.split(" (")[0] : "—", "should be near 0"),
+    stat("GPU", g.util_pct != null ? g.util_pct + "% busy" : "—",
+         [g.temp_c != null ? g.temp_c + " °C" : "", g.power_w != null ? Math.round(g.power_w) + " W" : ""].filter(Boolean).join(" · ")),
+  ].join("");
+  $("#updated").textContent = "Updated " + s.time + ". Refreshes every 15 s; costs no GPU time.";
+  const tb = $("#checks tbody"); tb.innerHTML = "";
+  let last = "";
+  for (const c of s.checks) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td class="layer">${c.layer !== last ? esc(c.layer) : ""}</td><td>${esc(c.name)}</td>
+      <td><span class="pill s-${c.state}">${LABEL[c.state] || c.state}</span></td>
+      <td>${esc(c.detail)}${c.fix && c.state !== "ok" ? `<div class="fix">→ ${esc(c.fix)}</div>` : ""}</td>`;
+    last = c.layer; tb.append(tr);
+  }
+  chart(d.days || [], ex.decode_ms);
+}
+function stat(k, v, d, pct) {
+  return `<div class="stat"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="d">${esc(d)}</div>` +
+    (pct != null ? `<div class="meter"><i style="width:${pct}%"></i></div>` : "") + `</div>`;
+}
+function chart(days, expect) {
+  const el = $("#chart");
+  if (!days.length) { el.innerHTML = `<p class="small mut">No history yet. The speed guard records real replies every 5 minutes once the agent is in use.</p>`; return; }
+  const W = 1000, H = 170, P = 26, max = Math.max(expect ? expect * 2 : 0, ...days.map(x => x.median_ms)) * 1.1;
+  const bw = (W - P * 2) / days.length, y = v => H - P - (v / max) * (H - P * 2);
+  let s = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="daily decode speed">`;
+  days.forEach((x, i) => {
+    const slow = expect && x.median_ms > expect * 1.5;
+    s += `<rect x="${P + i * bw + 2}" y="${y(x.median_ms)}" width="${Math.max(2, bw - 4)}" height="${H - P - y(x.median_ms)}" rx="2"
+      fill="${slow ? "var(--bad)" : "var(--acc)"}" opacity=".85"><title>${x.day}: median ${x.median_ms} ms/token (best ${x.best_ms}, worst ${x.worst_ms}, ${x.checks} checks)</title></rect>`;
+  });
+  if (expect) s += `<line x1="${P}" x2="${W - P}" y1="${y(expect)}" y2="${y(expect)}" stroke="var(--ok)" stroke-dasharray="6 5"/>
+    <text x="${W - P}" y="${y(expect) - 5}" text-anchor="end" font-size="12" fill="var(--ok)">expected ${expect} ms</text>`;
+  s += `<text x="${P}" y="${H - 6}" font-size="12" fill="var(--mut)">${days[0].day}</text>
+    <text x="${W - P}" y="${H - 6}" text-anchor="end" font-size="12" fill="var(--mut)">${days[days.length - 1].day}</text></svg>`;
+  el.innerHTML = s;
+}
+
+/* ── jobs (one at a time; output streams into the Activity panel) ── */
+let jobTimer = null, jobOffset = 0;
+async function startJob(kind, extra = {}) {
+  try { await api("/api/job", {kind, ...extra}); } catch (e) { toast(e.message); return; }
+  jobOffset = 0; $("#actLog").textContent = ""; $("#activity").hidden = false; $("#activity").classList.remove("min");
+  $("#actTitle").textContent = {bench: "Benchmark", verify: "Full verify", switch: "Switching model", download: "Downloading model",
+    up: "Bringing everything up", gateway: "Restarting the agent", ingest: "Re-indexing notes", tune: "Applying model settings", "voice-install": "Installing voice", "voice-use": "Changing the agent's voice"}[kind] || kind;
+  setJobButtons(true); pollJob();
+}
+async function pollJob() {
+  clearTimeout(jobTimer);
+  const j = await api("/api/job?offset=" + jobOffset).catch(() => null);
+  if (j) {
+    jobOffset = j.offset;
+    if (j.text) { const p = $("#actLog"); p.textContent += j.text; p.scrollTop = p.scrollHeight; }
+    const st = $("#actState");
+    if (j.running) { st.className = "pill s-wait"; st.textContent = `running ${j.elapsed}s`; jobTimer = setTimeout(pollJob, 1000); return; }
+    st.className = "pill " + (j.rc === 0 ? "s-ok" : "s-fail"); st.textContent = j.rc === 0 ? "done" : `finished with errors (exit ${j.rc})`;
+  }
+  setJobButtons(false); loadStatus(); if (tab === "models") loadModels(); if (tab === "character") loadCharacter(true); if (tab === "voice") loadVoice();
+}
+function setJobButtons(busy) { $$("[data-job]").forEach(b => b.disabled = busy); $$(".needsidle").forEach(b => b.disabled = busy); }
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-job]"); if (!b) return;
+  startJob(b.dataset.job, {quick: !!b.dataset.quick, profile: b.dataset.profile, voice: b.dataset.voice});
+});
+$("#actMin").onclick = () => { const a = $("#activity"); a.classList.toggle("min"); $("#actMin").textContent = a.classList.contains("min") ? "Show output" : "Hide output"; };
+$("#actClose").onclick = () => $("#activity").hidden = true;
+
+/* ── models: Advanced settings (hidden by default; bin/model.sh tune does the work) ── */
+const TUNE = [
+  ["temp", "Temperature", "How adventurous the word choices are. Lower is predictable and consistent; higher is more varied and makes more mistakes. Above about 1.0 hurts tool use.", 0.05],
+  ["top_p", "Top-p", "Only consider the likeliest words that together make up this share of the odds (0.8 = the top 80%). Lower is safer, narrower wording.", 0.05],
+  ["top_k", "Top-k", "Only consider this many of the likeliest next words. 20 to 40 is typical; 0 means no limit.", 1],
+  ["min_p", "Min-p", "Drop words less than this fraction as likely as the best one (0.05 = 5%). Adapts to how sure the model is; 0 turns it off.", 0.01],
+  ["repeat_penalty", "Repeat penalty", "Discourages reusing recent words. 1.0 is off. Above about 1.15 starts to garble code and tool calls.", 0.05],
+  ["presence_penalty", "Presence penalty", "Nudges the model toward new words and topics. 0 is off; up to about 1.5 helps if it gets stuck in loops.", 0.1],
+];
+function advPanel(p) {
+  const s = p.settings || {}, r = p.recommended || {};
+  const row = (k, label, help, input) => `<div class="advrow ${String(s[k]) !== String(r[k]) ? "changed" : ""}"><label for="t-${esc(p.name)}-${k}">${label}</label>${input}
+    <div class="small mut">${help} <span class="mono">Recommended: ${esc(r[k] === "" ? "off" : r[k])}</span></div></div>`;
+  const num = (k, step, extra = "") => `<input type="number" id="t-${esc(p.name)}-${k}" data-k="${k}" value="${esc(s[k])}" placeholder="off" step="${step}" min="0" ${extra}>`;
+  return `<details class="adv" data-adv="${esc(p.name)}"><summary>Advanced</summary><div class="advbox">
+    <div class="small mut" style="margin-bottom:6px">Settings for this model only; other models keep their own. ${p.active ? "Applying restarts the model (about 30 seconds; chat pauses)." : "They take effect when you switch to it."}</div>
+    ${TUNE.map(([k, l, h, st]) => s[k] === "" && r[k] === "" && k !== "presence_penalty" ? "" : row(k, l, h, num(k, st))).join("")}
+    ${row("ctx", "Context length", "How much conversation the model sees at once. Lowering it frees VRAM (useful if the Health tab shows spill). The maximum is what this profile was tested at.", num("ctx", 1024, `max="${esc(r.ctx)}" min="4096"`))}
+    ${row("thinking", "Thinking", "The model reasons step by step before answering. Better on hard problems; slower, and the reasoning uses context. Try a few tool tasks after turning it on.",
+      `<select id="t-${esc(p.name)}-thinking" data-k="thinking"><option ${s.thinking === "off" ? "selected" : ""}>off</option><option ${s.thinking === "on" ? "selected" : ""}>on</option></select>`)}
+    <div class="btns"><button class="b needsidle" data-tune="${esc(p.name)}">${p.active ? "Apply (restarts the model)" : "Save"}</button>
+      ${p.tuned ? `<button class="b needsidle" data-tune-reset="${esc(p.name)}">Reset to recommended</button>` : ""}</div>
+  </div></details>`;
+}
+document.addEventListener("click", e => {
+  const a = e.target.closest("[data-tune]"), z = e.target.closest("[data-tune-reset]");
+  if (z) { if (confirm("Put every setting for " + z.dataset.tuneReset + " back to its recommended value?")) startJob("tune", {profile: z.dataset.tuneReset, reset: true}); return; }
+  if (!a) return;
+  const box = a.closest("[data-adv]"), name = box.dataset.adv, p = (lastModels || []).find(x => x.name === name) || {}, cur = p.settings || {};
+  const settings = {};
+  box.querySelectorAll("[data-k]").forEach(i => { const v = String(i.value).trim(); if (v !== "" && v !== String(cur[i.dataset.k])) settings[i.dataset.k] = v; });
+  if (!Object.keys(settings).length) { toast("Nothing changed"); return; }
+  const risky = [];
+  if (+(settings.temp ?? cur.temp) > 1) risky.push("temperature above 1.0");
+  if (+(settings.repeat_penalty ?? cur.repeat_penalty) > 1.15) risky.push("repeat penalty above 1.15");
+  if (risky.length && !confirm(`${risky.join(" and ")} often breaks tool calls (files, web search). Apply anyway?`)) return;
+  startJob("tune", {profile: name, settings});
+});
+let lastModels = null;
+
+/* ── models ── */
+const gb = n => (n / 1e9).toFixed(1) + " GB";
+async function loadModels() {
+  const m = await api("/api/models").catch(e => (toast(e.message), null)); if (!m) return;
+  const open = new Set($$("details.adv[open]").map(d => d.dataset.adv)); lastModels = m.profiles;
+  $("#models").innerHTML = m.profiles.map(p => {
+    const tags = [
+      p.active ? `<span class="tag on">active</span>` : "",
+      p.present ? `<span class="tag">${gb(p.size)} on disk</span>` : p.partial ? `<span class="tag w">incomplete download (${gb(p.size)})</span>` : `<span class="tag no">file not downloaded</span>`,
+      `<span class="tag">${Number(p.CTX).toLocaleString()} context</span>`,
+      p.EXPECT_DECODE_MS ? `<span class="tag">~${p.EXPECT_DECODE_MS} ms/token</span>` : "",
+      p.benched ? `<span class="tag on">benchmarked here: ${esc(p.benched.decode_ms)} ms/token, ${esc(p.benched.prefill_tps)} tok/s reading</span>`
+        : p.MEASURED === "no" ? `<span class="tag w">not yet benchmarked</span>` : "",
+      /draft-mtp/.test(p.EXTRA_ARGS) ? `<span class="tag">MTP speed-up</span>` : "",
+      p.tuned ? `<span class="tag w">your adjustments</span>` : "",
+    ].join("");
+    const acts = [
+      !p.active && p.present ? `<button class="b pri" data-job="switch" data-profile="${esc(p.name)}">Switch to this</button>` : "",
+      !p.present && p.MODEL_URL ? `<button class="b" data-job="download" data-profile="${esc(p.name)}">Download (${p.MIN_BYTES ? "~" + gb(p.MIN_BYTES * 1.02) : "?"})</button>` : "",
+      p.active ? `<button class="b" data-job="bench">Benchmark</button>` : "",
+    ].join("");
+    return `<div class="model"><div><div class="name">${esc(p.name)}</div><div class="small">${esc(p.DESCRIPTION)}</div>
+      <div class="small mut mono">${esc(p.MODEL_FILE)}</div><div class="tags">${tags}</div>
+      ${!p.present && !p.MODEL_URL ? `<div class="small mut">Put the file in <span class="mono">${esc(m.model_dir)}</span> (see docs/MODELS.md).</div>` : ""}
+      ${advPanel(p)}</div>
+      <div class="btns" style="margin-top:0;flex-shrink:0">${acts}</div></div>`;
+  }).join("");
+  $$("details.adv").forEach(d => d.open = open.has(d.dataset.adv));   // a refresh keeps an open panel open
+  $("#nmBase").innerHTML = m.profiles.map(p => `<option ${p.active ? "selected" : ""}>${esc(p.name)}</option>`).join("");
+  $("#orphans").innerHTML = m.unprofiled_files.map(f => `<option value="${esc(f)}">`).join("");
+  if (jobTimer) setJobButtons(true);
+}
+$("#nmGo").onclick = async () => {
+  const body = {name: $("#nmName").value.trim(), description: $("#nmDesc").value.trim(), model_file: $("#nmFile").value.trim(),
+    model_url: $("#nmUrl").value.trim(), ctx: $("#nmCtx").value.trim(), base: $("#nmBase").value, min_bytes: $("#nmMin").value.trim()};
+  try { await api("/api/models/new", body); toast("Profile created: " + body.name); loadModels(); }
+  catch (e) { toast(e.message); }
+};
+$("#nmUrl").oninput = () => { const f = $("#nmUrl").value.split("/").pop().split("?")[0]; if (f.endsWith(".gguf") && !$("#nmFile").value) $("#nmFile").value = f; };
+
+/* ── character ── */
+let C = null, cur = null; const draft = {};
+async function loadCharacter(keepEdits) {
+  const c = await api("/api/character").catch(e => (toast(e.message), null)); if (!c) return;
+  C = c; if (!keepEdits) for (const k in draft) delete draft[k];
+  $("#wsPath").textContent = c.workspace;
+  if (!cur) cur = c.files[0].name;
+  renderFiles(); selectFile(cur);
+  $("#presets").innerHTML = c.presets.length ? c.presets.map(p =>
+    `<div class="model"><div><div class="name">${esc(p.name)}</div><div class="small mut">${esc(p.about)}</div></div>
+     <div class="btns" style="margin-top:0"><button class="b" data-preset="${esc(p.name)}">Load</button></div></div>`).join("")
+    : `<p class="small mut">No presets in characters/.</p>`;
+  $("#backups").innerHTML = c.history.length ? c.history.map(h =>
+    `<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0"><span class="mono">${esc(h)}</span>
+     <button class="b" data-restore="${esc(h)}">Restore</button></div>`).join("") : `<span class="mut">None yet.</span>`;
+  $("#memInfo").textContent = `${c.memory_notes} note file(s) in the workspace memory/ folder. The agent writes notes there; they're indexed nightly, or now with the button below. A fresh install starts with no memories.`;
+}
+function renderFiles() {
+  const cap = C.cap;
+  $("#fileList").innerHTML = C.files.map(f => {
+    const t = draft[f.name] ?? f.content, chars = t.length;
+    return `<button data-file="${f.name}" aria-selected="${f.name === cur}" class="${draft[f.name] !== undefined ? "dirty" : ""}">
+      <span>${f.name}</span><span class="mut small">${chars ? "~" + Math.round(chars / 3.6).toLocaleString() + " tok" : "empty"}</span></button>`;
+  }).join("");
+  const total = C.files.reduce((a, f) => a + (draft[f.name] ?? f.content).length, 0);
+  const tok = Math.round(total / 3.6);
+  $("#tokTotal").innerHTML = `Together these add ~${tok.toLocaleString()} tokens to every prompt.` +
+    (tok > 8000 ? ` <span style="color:var(--warn)">That's a lot: the first reply of each session takes longer, and less room is left for the conversation.</span>` : "");
+  const dirty = Object.keys(draft).length > 0;
+  $("#saveChar").disabled = !dirty; $("#revertChar").disabled = !dirty;
+}
+function selectFile(n) {
+  cur = n; const f = C.files.find(x => x.name === n);
+  $("#fileHelp").textContent = f.help + (f.exists ? "" : " (doesn't exist yet; saving creates it)");
+  $("#editor").value = draft[n] ?? f.content; count(); renderFiles();
+}
+function count() {
+  const n = $("#editor").value.length;
+  $("#fileCount").innerHTML = `${n.toLocaleString()} characters` + (n > C.cap ?
+    ` <span style="color:var(--bad)">over the ${C.cap.toLocaleString()}-character limit: the end of this file will be cut off (raise BOOTSTRAP_MAX_CHARS or shorten it)</span>` : "");
+}
+$("#fileList").onclick = e => { const b = e.target.closest("[data-file]"); if (b) selectFile(b.dataset.file); };
+$("#editor").oninput = () => {
+  const f = C.files.find(x => x.name === cur), v = $("#editor").value;
+  if (v === f.content) delete draft[cur]; else draft[cur] = v; count(); renderFiles();
+};
+$("#saveChar").onclick = async () => {
+  try { const r = await api("/api/character", {files: {...draft}}); toast("Saved " + r.saved.join(", ") + ". Backup: " + r.backup); loadCharacter(); }
+  catch (e) { toast(e.message); }
+};
+$("#revertChar").onclick = () => { for (const k in draft) delete draft[k]; selectFile(cur); };
+document.addEventListener("click", async e => {
+  const p = e.target.closest("[data-preset]"), r = e.target.closest("[data-restore]");
+  if (p) {
+    if (!confirm(`Load the "${p.dataset.preset}" preset? It replaces the current character files (a backup is taken first). USER.md is kept unless the preset has one.`)) return;
+    try { const x = await api("/api/character/preset", {name: p.dataset.preset}); toast("Loaded: " + x.loaded.join(", ")); cur = null; loadCharacter(); } catch (er) { toast(er.message); }
+  }
+  if (r) {
+    if (!confirm(`Restore the character files from backup ${r.dataset.restore}? (The current files are backed up first.)`)) return;
+    try { await api("/api/character/restore", {backup: r.dataset.restore}); toast("Restored"); loadCharacter(); } catch (er) { toast(er.message); }
+  }
+});
+$("#pSave").onclick = async () => {
+  const name = $("#pName").value.trim(); if (!name) return;
+  const about = prompt("One line describing this character (shown in the preset list):", "") ?? "";
+  try { await api("/api/character/save-preset", {name, about}); toast("Preset saved to characters/" + name); loadCharacter(true); }
+  catch (e) {
+    if (/exists/.test(e.message) && confirm("A preset with that name exists. Overwrite it?")) {
+      await api("/api/character/save-preset", {name, about, overwrite: true}).then(() => toast("Preset updated")).catch(x => toast(x.message));
+    } else toast(e.message);
+  }
+};
+$("#qGo").onclick = () => {
+  const v = id => $(id).value.trim(), lines = s => s.split(/\n|;\s*/).map(x => x.trim()).filter(Boolean);
+  const name = v("#qName") || "Assistant";
+  draft["IDENTITY.md"] = `# IDENTITY.md\n\n- **Name:** ${name}\n` + (v("#qEmoji") ? `- **Emoji:** ${v("#qEmoji")}\n` : "") +
+    (v("#qRole") ? `- **Role:** ${v("#qRole")}\n` : "") + (v("#qStyle") ? `- **Style:** ${v("#qStyle").replace(/\n/g, " ")}\n` : "");
+  draft["SOUL.md"] = `# SOUL.md: who ${name} is\n\n` +
+    (v("#qRole") ? `You are ${name}, ${v("#qRole")}.\n\n` : `You are ${name}.\n\n`) +
+    (v("#qPers") ? `## Personality\n${lines(v("#qPers")).map(x => "- " + x).join("\n")}\n\n` : "") +
+    (v("#qStyle") ? `## How you talk\n${lines(v("#qStyle")).map(x => "- " + x).join("\n")}\n\n` : "") +
+    (v("#qAlways") ? `## Always\n${lines(v("#qAlways")).map(x => "- " + x).join("\n")}\n\n` : "") +
+    (v("#qNever") ? `## Never\n${lines(v("#qNever")).map(x => "- " + x).join("\n")}\n\n` : "") +
+    `## Ground rules\n- Be honest about what you don't know. Say so rather than guess.\n- If something is risky or can't be undone, ask first.\n`;
+  if (v("#qUser") || v("#qTz") || v("#qAbout"))
+    draft["USER.md"] = `# USER.md: about the person you work with\n\n` + (v("#qUser") ? `- **Call them:** ${v("#qUser")}\n` : "") +
+      (v("#qTz") ? `- **Timezone:** ${v("#qTz")}\n` : "") + (v("#qAbout") ? `\n${v("#qAbout")}\n` : "");
+  for (const k of ["IDENTITY.md", "SOUL.md", "USER.md"]) if (draft[k] !== undefined && draft[k] === (C.files.find(f => f.name === k) || {}).content) delete draft[k];
+  selectFile("SOUL.md"); toast("Drafted. Review the files marked • then press Save changes.");
+};
+
+/* ── voice (optional add-on; bin/voice.sh does the work) ── */
+let lastVoice = null;
+async function loadVoice() {
+  const v = await api("/api/voice").catch(e => (toast(e.message), null)); if (!v) return; lastVoice = v;
+  $("#vNotInstalled").hidden = v.installed; $("#vInstalled").hidden = !v.installed;
+  if (!v.installed) return;
+  const st = (v.health || {}).status;
+  $("#vStatus").textContent = st === "ok" ? `Running (${v.engine}). The agent speaks as "${v.active}".`
+    : st === "loading" ? "Loading the voice model (about 20 seconds)…" : `Voice server is ${st || "down"}. The watchdog restarts it within a minute; see voice-server.log.`;
+  if (st === "loading") setTimeout(() => { if (tab === "voice") loadVoice(); }, 5000);
+  $("#vList").innerHTML = v.voices.map(x => `<div class="model"><div><div class="name">${esc(x.name)}${x.name === v.active ? ' <span class="tag on">the agent&#39;s voice</span>' : ""}</div>
+      <div class="small mut">${x.builtin ? "built in" : `${esc(x.seconds)} s clip · added ${esc(x.created || "")}`}</div></div>
+      <div class="btns" style="margin-top:0;flex-shrink:0">
+        <button class="b" data-vprev="${esc(x.name)}">Preview</button>
+        ${x.builtin ? "" : `<button class="b" data-vclip="${esc(x.name)}">Hear the clip</button>`}
+        ${x.name === v.active ? "" : `<button class="b pri needsidle" data-job="voice-use" data-voice="${esc(x.name)}">Use for the agent</button>`}
+        ${x.builtin || x.name === v.active ? "" : `<button class="b" data-vdel="${esc(x.name)}">Delete</button>`}</div></div>`).join("");
+}
+async function playSpeech(text, voice) {
+  const r = await fetch("/api/voice/speak", {method: "POST", headers: {"Content-Type": "application/json", "X-Console": "1"},
+    body: JSON.stringify({text, voice})});
+  if (!r.ok) { let m = "speech failed"; try { m = (await r.json()).error; } catch (e) {} throw new Error(m); }
+  const a = $("#vAudio"); a.src = URL.createObjectURL(await r.blob()); a.hidden = false; a.play().catch(() => {});
+}
+document.addEventListener("click", async e => {
+  const p = e.target.closest("[data-vprev]"), c = e.target.closest("[data-vclip]"), d = e.target.closest("[data-vdel]");
+  if (p) { p.disabled = true; try { await playSpeech($("#vSay").value || "Hello there.", p.dataset.vprev); } catch (er) { toast(er.message); } p.disabled = false; }
+  if (c) { const a = $("#vAudio"); a.src = "/api/voice/clip?name=" + encodeURIComponent(c.dataset.vclip); a.hidden = false; a.play().catch(() => {}); }
+  if (d && confirm(`Delete the voice "${d.dataset.vdel}"? Its recording is removed.`)) {
+    try { await api("/api/voice/remove", {name: d.dataset.vdel}); toast("Deleted"); loadVoice(); } catch (er) { toast(er.message); } }
+});
+$("#vSpeak").onclick = async () => { const b = $("#vSpeak"); b.disabled = true; b.textContent = "Speaking…";
+  try { await playSpeech($("#vSay").value, lastVoice && lastVoice.active); } catch (er) { toast(er.message); } b.disabled = false; b.textContent = "Speak"; };
+$("#vSend").onclick = async () => {
+  const msg = $("#vMsg").value.trim(); if (!msg) return; const b = $("#vSend"); b.disabled = true; b.textContent = "Thinking…";
+  const box = $("#vReply"); box.hidden = false; box.textContent = "…";
+  try {
+    const r = await api("/api/voice/talk", {text: msg}); box.textContent = r.reply || "(no reply)"; $("#vMsg").value = "";
+    if (r.reply) { b.textContent = "Speaking…"; await playSpeech(r.reply.slice(0, 2000)); }
+  } catch (er) { box.textContent = er.message; }
+  b.disabled = false; b.textContent = "Send";
+};
+$("#vMsg").addEventListener("keydown", e => { if (e.key === "Enter") $("#vSend").click(); });
+$("#vAdd").onclick = async () => {
+  const name = $("#vName").value.trim().toLowerCase(), f = $("#vFile").files[0];
+  if (!name || !f) return toast("Give the voice a name and choose a recording");
+  if (!$("#vConsent").checked) return toast("Please confirm it's your voice or you have permission");
+  if (f.size > 25e6) return toast("That file is over 25 MB; trim it to 10-30 seconds first");
+  const b = $("#vAdd"); b.disabled = true; b.textContent = "Processing…";
+  try {
+    const data = await new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.onerror = bad; r.readAsDataURL(f); });
+    const r = await api("/api/voice/add", {name, filename: f.name, data, consent: true});
+    toast(r.log.split("\n").pop()); $("#vName").value = ""; $("#vFile").value = ""; $("#vConsent").checked = false; loadVoice();
+  } catch (er) { toast(er.message); }
+  b.disabled = false; b.textContent = "Add voice";
+};
+
+/* ── start ── */
+{ const h = location.hash.slice(1); let t = ["health", "models", "character", "voice"].includes(h) ? h : null;
+  if (!t) try { t = localStorage.getItem("console.tab"); } catch (e) {}
+  if (t) showTab(t); }
+loadStatus(); setInterval(() => { if (!document.hidden) loadStatus(); }, 15000);
+api("/api/job?offset=0").then(j => { if (j.running) { $("#activity").hidden = false; jobOffset = 0; setJobButtons(true); pollJob(); } }).catch(() => {});
+</script>
+</body>
+</html>

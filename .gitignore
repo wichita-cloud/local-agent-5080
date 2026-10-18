@@ -1,0 +1,15 @@
+# local config and secrets: never commit
+config/stack.env
+config/secrets.env
+config/tuning/
+*.key
+*.pem
+
+# models and runtime state
+*.gguf
+models/*.gguf
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.log

@@ -1,0 +1,4 @@
+# Shell and Python must keep LF line endings even when cloned or committed on Windows
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf

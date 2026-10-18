@@ -1,0 +1,5 @@
+# local-agent-5080 guards. bin/install.sh merges these into your crontab (replacing older local-agent-5080 lines).
+# REPO is replaced with the repo path at install time.
+* * * * *   /bin/bash REPO/guards/services-watchdog.sh >/dev/null 2>&1
+*/5 * * * * /bin/bash REPO/guards/decode-floor.sh >/dev/null 2>&1
+30 3 * * *  /bin/bash -c '. REPO/bin/lib.sh && "$VENV/bin/python3" REPO/services/memory_ingest.py >> "$STATE_DIR/ingest.log" 2>&1'

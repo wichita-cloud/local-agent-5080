@@ -1,0 +1,13 @@
+# Copy to %UserProfile%\.wslconfig, then run `wsl --shutdown` once. Tested on 32 GB RAM / Ryzen 9 9900X.
+[wsl2]
+# The model's prompt cache, the memory service (~3.4 GB RSS) and Docker together need ~16 GB under load.
+# Below that, the Linux OOM killer starts killing services every few hours. 20 GB leaves 12 GB for Windows.
+memory=20GB
+swap=8GB
+# vCPUs are scheduled threads, not reservations. llama is pinned to cores 0-7 (LLAMA_CPUSET), the rest is free.
+processors=16
+localhostForwarding=true
+
+[experimental]
+# Return idle page cache to Windows slowly; 'gradual' won't yank the model's file cache mid-load.
+autoMemoryReclaim=gradual
