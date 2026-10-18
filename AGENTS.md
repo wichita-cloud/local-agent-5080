@@ -56,8 +56,9 @@ Breaking any of these causes a failure that is easy to miss. The reasoning is in
 5. **Verify the effect, not the log line.** A restart is proven by a changed PID and a healthy probe. A patch is proven
    by its marker count rising. Speed is proven by `bench.sh`. A watchdog can log success while doing nothing.
 6. **Unknown is not healthy.** A guard that can't measure exits 96 and writes a `MEASUREMENT-FAILURE` file. `verify.sh` fails on it.
-7. **The display must not be on the NVIDIA GPU.** If it is, Windows takes VRAM, llama spills ~300 MB to system RAM,
+7. **For the 27B, the display must not be on the NVIDIA GPU.** If it is, Windows takes VRAM, llama spills ~300 MB to system RAM,
    and decode drops from ~20 to ~120 ms/token with no error anywhere. `windows/gpu-check.ps1` and `verify.sh` check this.
+   Smaller profiles (14B, 8B) leave room for the desktop, so the check only warns while ≥1 GiB of VRAM stays free.
 8. **The memory proxy and readiness gate must fail open.** They sit on the chat path, so an error in either must
    forward the original request unchanged.
 9. **Don't match processes with `pgrep -f`/`pkill -f` on a script name.** It matches the shell that's searching.

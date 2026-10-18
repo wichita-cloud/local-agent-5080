@@ -88,14 +88,18 @@ if command -v powershell.exe >/dev/null 2>&1; then
   out=$(timeout 60 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ps1" -Machine </dev/null 2>/dev/null | tr -d '\r')
   disp=$(echo "$out" | sed -n 's/^display_on_nvidia=//p'); shr=$(echo "$out" | sed -n 's/^wsl_vm_shared_mib=//p')
   others=$(echo "$out" | sed -n 's/^other_nvidia_procs=//p')
+  # The desktop costs ~0.5 GB of VRAM when it's drawn by the 5080. That breaks the 27B, but a smaller model (14B, 8B)
+  # leaves room for it, so with >1 GiB still free it's only a warning (same threshold as the spill rule below).
+  vfree=$(vram_free_mib)
   case "$disp" in
     0) pass "display is not on the NVIDIA GPU" ;;
-    1) fail "the display is on the NVIDIA GPU"; hint "plug the monitor into the motherboard video output (docs/STABILITY.md)" ;;
+    1) if [ "${vfree:-0}" -ge 1024 ]; then
+         warn "the display is on the NVIDIA GPU, but ${vfree} MiB VRAM is still free: fine for this model. Not counted"
+       else fail "the display is on the NVIDIA GPU"; hint "Win+P: show the desktop only on the motherboard's screen (docs/STABILITY.md), or use a smaller model"; fi ;;
     *) fail "could not read display adapter (gpu-check.ps1 failed)" ;;
   esac
   # Shared memory alone is ambiguous: WSL keeps ~100-170 MiB there even when healthy. The driver only spills the
   # model into it when dedicated VRAM is full, so >1 GiB free VRAM means it isn't a spill (seen: 162 MiB, 8 GB free).
-  vfree=$(vram_free_mib)
   if [ -n "$shr" ]; then
     if [ "$shr" -le "$SPILL_MAX_MIB" ]; then pass "model spill to system RAM: ${shr} MiB (limit $SPILL_MAX_MIB)"
     elif [ "${vfree:-0}" -ge 1024 ]; then pass "shared GPU memory ${shr} MiB, but ${vfree} MiB VRAM free: WSL's own, not a spill"

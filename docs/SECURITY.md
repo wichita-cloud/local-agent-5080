@@ -3,6 +3,10 @@
 This is an **agent**: it can run shell commands, read and write files, and fetch web pages. Treat it like giving a capable
 stranger a terminal on your PC.
 
+## Reporting a vulnerability
+Please don't open a public issue. Use the repository's **Security** tab → *Report a vulnerability* (only the maintainer
+sees it), or email BenRTX5080@proton.me.
+
 ## Defaults in this repo
 - The gateway, gate, memory proxy and memory service bind to **127.0.0.1** only. Windows reaches the dashboard through
   WSL's localhost forwarding; other machines on your network cannot.

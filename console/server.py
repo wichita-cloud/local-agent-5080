@@ -289,8 +289,16 @@ def status():
         add("GPU memory", "display / spill check", "fail", w["error"], "Run windows\\gpu-check.ps1 in PowerShell to see why.")
     else:
         disp = w.get("display_on_nvidia")
-        add("GPU memory", "display not on the NVIDIA GPU", "ok" if disp == "0" else "fail", "",
-            "" if disp == "0" else "Plug the monitor into the motherboard video output (docs/STABILITY.md).")
+        vfree0 = g.get("free_mib") if g else None
+        # same rule as verify.sh: the desktop on the 5080 is fine for a smaller model while >1 GiB VRAM stays free
+        if disp == "0":
+            add("GPU memory", "display not on the NVIDIA GPU", "ok")
+        elif disp == "1" and vfree0 is not None and vfree0 >= 1024:
+            add("GPU memory", "display on the NVIDIA GPU", "warn", f"{vfree0:.0f} MiB VRAM still free: fine for this model",
+                "The 27B needs the desktop on the motherboard's screen (Win+P, docs/STABILITY.md).")
+        else:
+            add("GPU memory", "display not on the NVIDIA GPU", "fail", "",
+                "Win+P: show the desktop only on the motherboard's screen (docs/STABILITY.md), or switch to a smaller model.")
         try:
             shr = int(float(w.get("wsl_vm_shared_mib", "")))
         except ValueError:

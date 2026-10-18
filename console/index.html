@@ -41,7 +41,7 @@ h3{font-size:14px;margin:14px 0 6px}
 .pill::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
 .s-ok,.s-optimal{color:var(--ok);background:var(--okbg)}
 .s-fail,.s-down{color:var(--bad);background:var(--badbg)}
-.s-degraded,.s-wait{color:var(--warn);background:var(--warnbg)}
+.s-degraded,.s-wait,.s-warn{color:var(--warn);background:var(--warnbg)}
 .s-skip,.s-unknown,.s-paused{color:var(--info);background:var(--infobg)}
 .verdict{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
 .verdict .big{font-size:22px;font-weight:700;letter-spacing:-.01em}
@@ -333,7 +333,7 @@ async function api(path, body) {
 }
 function toast(msg) { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
   document.body.append(t); setTimeout(() => t.remove(), 3200); }
-const LABEL = {ok: "ok", fail: "fail", wait: "loading", skip: "no data",
+const LABEL = {ok: "ok", fail: "fail", warn: "note", wait: "loading", skip: "no data",
   optimal: "Optimal", degraded: "Degraded", down: "Down", unknown: "Unconfirmed", paused: "Paused"};
 
 /* ── tabs ── */

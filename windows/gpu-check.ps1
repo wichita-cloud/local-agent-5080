@@ -41,10 +41,11 @@ if ($nvLuid) { $vmShrMiB = ($shrRows | Where-Object { ($vmPids -contains $_.Pid)
 
 $others = @()
 if ($nvLuid) {
-  # dwm reports a large cross-adapter figure when the display moved to the iGPU; it is not real usage there.
+  # dwm reports a large cross-adapter figure (seen: 13 GB, more than the card has in use); it is not real usage.
+  # Drop it when the display is on the iGPU, or when its figure is impossible.
   $others = $dedRows | Where-Object { $_.Luid -eq $nvLuid -and ($vmPids -notcontains $_.Pid) -and $_.MiB -ge 20 } | ForEach-Object {
     $n = (Get-Process -Id $_.Pid).ProcessName; if (-not $n) { $n = "pid$($_.Pid)" }
-    if (-not ($n -eq 'dwm' -and $displayOnNvidia -eq 0)) { "${n}:$($_.MiB)" } }
+    if (-not ($n -eq 'dwm' -and ($displayOnNvidia -eq 0 -or $_.MiB -gt ($used - $vmDedMiB)))) { "${n}:$($_.MiB)" } }
 }
 
 if ($Machine) {
@@ -58,10 +59,13 @@ if ($Machine) {
 }
 
 "NVIDIA GPU: $used / $total MiB used, $free MiB free"
-if ($displayOnNvidia) { "  PROBLEM: the display is on the NVIDIA GPU. Plug the monitor into the motherboard video output." }
+if ($displayOnNvidia -and $free -ge 1024) { "  NOTE: the display is on the NVIDIA GPU, with $free MiB still free. Fine for the 14B/8B; the 27B needs the desktop only on the motherboard's screen (Win+P)." }
+elseif ($displayOnNvidia) { "  PROBLEM: the display is on the NVIDIA GPU and VRAM is nearly full. Win+P: show the desktop only on the motherboard's screen, or use a smaller model." }
 else { "  ok: display is NOT on the NVIDIA GPU" }
 if ($nvLuid) {
   "WSL VM on NVIDIA: $vmDedMiB MiB dedicated, $([int]$vmShrMiB) MiB shared (system RAM)"
-  if ($vmShrMiB -gt 150) { "  PROBLEM: the model has spilled to system RAM. Free VRAM, then restart it (bin/llama-up.sh). See docs/STABILITY.md" }
+  # same rule as verify.sh: WSL keeps ~100-170 MiB shared even when healthy; with >1 GiB VRAM free it isn't a spill
+  if ($vmShrMiB -gt 150 -and $free -ge 1024) { "  ok: that shared memory is WSL's own ($free MiB VRAM still free), not a spill" }
+  elseif ($vmShrMiB -gt 150) { "  PROBLEM: the model has spilled to system RAM. Free VRAM, then restart it (bin/llama-up.sh). See docs/STABILITY.md" }
 } else { "WSL VM: no large GPU allocation (model not running?)" }
 if ($others.Count) { "Other processes on the NVIDIA GPU (MiB): $($others -join ', ')"; "  Close them, or pin them to the iGPU with .\set-igpu-preference.ps1" }

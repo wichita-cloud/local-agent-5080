@@ -46,7 +46,15 @@ exactly enough to push the model over.
 1. **Monitor on the motherboard video output.** The Ryzen 9000-series CPU has integrated graphics. With the display
    there, Windows draws on the iGPU and the 5080 holds nothing but the model. Check:
    `nvidia-smi --query-gpu=display_active --format=csv` → `Disabled`.
-   - Games: plug the monitor back into the 5080 (or use a second cable or input on the monitor), and use `bin/gpu-release.sh` first.
+   - **Two cables make this painless:** HDMI from the motherboard and DisplayPort from the 5080 into the same monitor.
+     Windows then sees two screens, so the desktop must be shown on **only one** of them: Win+P (or Settings → System →
+     Display → "Show only on …"), never *Duplicate* or *Extend*, which keep the 5080 drawing a desktop.
+   - Games: `windows\Game-Mode.bat` first (it frees the GPU and prints the steps), Win+P to the 5080's screen, monitor
+     input to DisplayPort. Back: Win+P to the motherboard's screen, input to HDMI, then `windows\Restore-Agent.bat`.
+   - **Or skip all of this with a smaller model.** Measured with the monitor on the 5080 (desktop and a browser on it):
+     the 14B ran at 13.6 ms/token decode and 3,086 tok/s prefill with 3.0 GB of VRAM free, against 12.1 ms and 3.5 GB
+     with the display on the motherboard. The 8B leaves more room still. `verify.sh` and the console then show the display check as a note, not a failure, as long as
+     ≥1 GiB stays free.
 2. **Pin browsers to the iGPU**: `windows\set-igpu-preference.ps1`, so the dashboard tab itself doesn't eat VRAM.
 3. **Apps keep their GPU memory until they restart.** After moving the display, restart Explorer and any
    open apps, or simply reboot.

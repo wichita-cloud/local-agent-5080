@@ -17,6 +17,35 @@ It is built for the common retail configuration: Ryzen 9 9900X (with integrated 
 32 GB RAM and Windows 11, running WSL2. It will work on similar machines; the numbers in the docs were
 measured on that one.
 
+> **The one trade-off: for the 27B, your monitor runs off the motherboard.** Running the 27B at 4-bit entirely on the
+> 5080 needs the whole card. If the 5080 also draws your Windows desktop, that takes about 0.5 GB of its memory, which
+> is enough to push part of the model into system RAM and make replies **about 6× slower**, with no error message. So
+> Windows runs on the **motherboard's video output** (the Ryzen's built-in graphics) and the 5080 is left to the model.
+>
+> **The easy way: two cables into the same monitor.** HDMI from the motherboard, DisplayPort from the 5080. Then
+> switching is a press of the monitor's input button, not a cable swap.
+>
+> **⚠ Show the desktop on ONE screen only.** With two cables, Windows sees two screens. If it *duplicates* or *extends*
+> the desktop, the 5080 keeps drawing it and the model slows down. Each time you switch, press **Win+P** and pick the
+> option that shows the desktop **only** on the screen you're switching to (or Settings → System → Display →
+> "Show only on …"; press *Identify* the first time to learn which number is which). Never *Duplicate* or *Extend*.
+>
+> | To play a game | Back to AI |
+> |---|---|
+> | 1. Double-click **Game Mode** (`windows\Game-Mode.bat`; frees all 16 GB) | 1. **Win+P** → only the motherboard's screen |
+> | 2. **Win+P** → only the graphics card's screen | 2. Monitor input → **HDMI** (motherboard) |
+> | 3. Monitor input → **DisplayPort** (5080) | 3. Double-click **Restore Agent** (`windows\Restore-Agent.bat`) |
+>
+> Copy both `.bat` files to your desktop for one-click switching; each one prints these steps as a reminder. The
+> screen may go dark for a moment between steps 2 and 3. That's expected.
+>
+> **Don't want to bother? Use a smaller model and leave the monitor on the 5080.** Measured with the desktop on the
+> 5080, the 14B still ran at 13.6 ms/token (~74 tok/s, about 1.5× the 27B's speed) with 3 GB of VRAM to spare. It is
+> weaker at multi-step tool use. The 8B leaves even more room. Switch in the console's Models tab. The health check then shows the display as a *note*, not a failure, as long as ≥1 GiB stays free.
+>
+> Also worth knowing: depending on the board, the motherboard's port may cap refresh rate, resolution or HDR, and
+> NVIDIA display features such as G-Sync need the monitor on the 5080. Details: [docs/STABILITY.md](docs/STABILITY.md).
+
 > **Who this is for:** someone comfortable pasting commands into a terminal. It is not a one-click installer.
 > Please read [Disclaimer & Responsible Use](#disclaimer--responsible-use) before you use it.
 > If you use an AI coding tool (Claude Code, Codex, Cursor and so on), point it at [`AGENTS.md`](AGENTS.md) first. That
@@ -37,6 +66,7 @@ measured on that one.
 | Your own character | the agent's name, personality and rules are plain Markdown files you edit in the console. It ships neutral |
 | Memory | Local BGE-M3 embeddings and a reranker on the CPU; relevant memories are added to each turn automatically |
 | Reliability | A layered verifier (`bin/verify.sh`), cron guards that detect silent GPU spill, and a "game mode" that frees the GPU |
+| The trade-off | for the 27B, Windows runs on the motherboard's video output so the model gets the whole card; or run the 14B/8B with the monitor on the 5080 ([see above](#local-agent-5080)) |
 
 ---
 
@@ -62,7 +92,8 @@ Test it by asking the agent to "search the web for today's top science news".
 ### 0. Windows prerequisites (one time)
 1. **Plug your monitor into the motherboard's video output (HDMI/DP on the rear I/O), not the graphics card.**
    This lets Windows draw the desktop on the CPU's integrated graphics, which leaves all 16 GB of the 5080 for the
-   model. It is the single most important step; see [docs/STABILITY.md](docs/STABILITY.md) for why (it's a 6× speed difference).
+   model. Gamers: keep a second cable from the 5080 to another input on the same monitor, and set Windows to show the
+   desktop on one screen only (Win+P; see the trade-off note at the top). It is the single most important step; see [docs/STABILITY.md](docs/STABILITY.md) for why (it's a 6× speed difference).
    If the motherboard output shows nothing, enable the iGPU in the BIOS (often called "Integrated Graphics: Force/Enabled").
 2. Install the current **NVIDIA Game Ready or Studio driver**, **WSL2** (`wsl --install -d Ubuntu-22.04`) and
    **Docker Desktop** (Settings → Resources → WSL integration → enable for Ubuntu-22.04).
@@ -107,7 +138,7 @@ knowledge base, plus exactly where your data lives and what (if anything) goes o
 | Check it isn't secretly slow | Health → Run benchmark | `bin/bench.sh` |
 | Try a different model | Models → Download, then Switch | `bin/model.sh download <name>`, then `bin/model.sh use <name>` |
 | Change its personality | Character tab | edit the files in `~/.openclaw/workspace/` |
-| Free the GPU to play a game | | `bin/gpu-release.sh` (and `bin/gpu-restore.sh` afterwards) |
+| Play a game | **Game Mode** → Win+P (graphics card's screen only) → monitor input to DisplayPort. Afterwards: Win+P (motherboard's screen only) → input to HDMI → **Restore Agent** | `bin/gpu-release.sh` … `bin/gpu-restore.sh` |
 | Bring everything back after a reboot | Health → Bring everything up | `bin/up.sh` (starts Docker Desktop if needed, then every layer, then verifies) |
 
 ---
@@ -187,3 +218,8 @@ is entirely at the user's own risk and responsibility.
   The OpenClaw patches are written against that exact version, and they refuse to apply to anything else.
 - The numbers in these docs were measured on one machine. Your mileage will vary; `bin/bench.sh` tells you yours.
 - This is a hobby project shared as-is (MIT license). Issues and PRs are welcome.
+
+## Contact
+- **Bugs and questions:** [open an issue](https://github.com/wichita-cloud/local-agent-5080/issues).
+- **A security problem:** report it privately under the repo's **Security** tab → *Report a vulnerability*, not in a public issue.
+- **Anything else, privately:** BenRTX5080@proton.me
