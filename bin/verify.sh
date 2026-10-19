@@ -127,6 +127,15 @@ elif [ ! -f "$m" ] && [ -f "$inst" ] && [ $(( $(date +%s) - $(stat -c %Y "$inst"
   warn "decode guard hasn't run yet (guards installed $(( ($(date +%s) - $(stat -c %Y "$inst")) / 60 )) min ago; it runs every 5 min). Not counted"
 else fail "decode guard has not measured in 30+ min (cron down or script broken)"; fi
 [ -f "$GAME_FLAG" ] && { fail "game mode is ON"; hint "bin/gpu-restore.sh"; }
+# A repair loop that keeps failing is a stuck state, not a retry. The watchdog stops after 3 failed restarts in an
+# hour and logs STUCK; without this check nobody would see that line.
+stuck=""
+for f in "$STATE_DIR"/watchdog.*.fails; do
+  [ -f "$f" ] || continue
+  [ "$(awk -v c="$(( $(date +%s) - 3600 ))" '$1>=c' "$f" | wc -l)" -ge 3 ] && stuck="$stuck $(basename "$f" .fails | sed 's/^watchdog\.//')"
+done
+if [ -n "$stuck" ]; then fail "watchdog gave up restarting:$stuck (3+ failed restarts in the last hour)"; hint "tail $STATE_DIR/watchdog.log and that service's log in $STATE_DIR"
+else pass "no repair loop stuck"; fi
 
 printf '\n  %d passed, %d failed\n' "$P" "$F"
 [ "$F" -gt 0 ] && echo "  Fix the LOWEST failing layer first. Upper-layer failures are usually symptoms."

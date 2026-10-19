@@ -17,7 +17,7 @@ for negligible gain). The boost is a gentle tiebreak only; the reranker dominate
 
 Env: MEMORY_PORT, MEMORY_DB, MEM_RERANK=0 to disable reranking.
 """
-import datetime as dt, hashlib, json, math, os, sys
+import datetime as dt, hashlib, json, math, os, sys, time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, unquote_plus, urlparse
 
@@ -62,7 +62,13 @@ ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name=EMBED_M
 collection = chromadb.PersistentClient(path=DB_PATH, settings=chromadb.config.Settings(anonymized_telemetry=False)).get_or_create_collection(
     "agent_memory", embedding_function=ef, metadata={"hnsw:space": "cosine"})
 reranker = CrossEncoder(RERANK_MODEL, device="cpu") if RERANK_ON else None
-log("ready: %d memories, reranker %s" % (collection.count(), "on" if reranker else "off"))
+# Warm both models BEFORE the port opens. The memory proxy gives a query 2.5 s, and the first one after a start (a
+# reboot: model files not in the page cache yet) can take longer, so that turn silently got no memories at all.
+_t = time.time()
+ef(["warm-up"])
+if reranker is not None:
+    reranker.predict([("warm-up", "warm-up")])
+log("ready: %d memories, reranker %s, warm-up %.1fs" % (collection.count(), "on" if reranker else "off", time.time() - _t))
 
 # Gentle priors by memory source. Rename/extend to match whatever writes into the store.
 SOURCE_TRUST = {"user_answer": 0.10, "note": 0.08, "project": 0.06, "summary": 0.08,
