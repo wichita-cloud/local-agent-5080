@@ -9,6 +9,9 @@
 #   4. download the model weights once (Hugging Face, public; no account)
 #   5. start the voice server and point OpenClaw's spoken replies at it
 #
+# --deps-only: steps 1-3 and an import check, then stop (no weights, nothing started). The weekly GitHub check uses it
+# to catch upstream package changes before a user does.
+#
 # It runs on the CPU cores in VOICE_CPUSET and never touches the GPU. Undo (or delete just $VOICE_VENV/.installed to disable): rm -rf "$VOICE_VENV" ~/.cache/huggingface/hub/models--ResembleAI--chatterbox-*
 set -u
 . "$(dirname "$0")/lib.sh"
@@ -33,7 +36,7 @@ ok "enough space"
 log "3/5 voice venv ($VOICE_VENV)"
 # "installed" = the .installed marker, written only after step 4 succeeds. Everything else (services-up, the watchdog,
 # verify, gateway-up, the console) checks the marker, so nothing starts a half-installed voice server mid-pip-install.
-rm -f "$VOICE_VENV/.installed"
+[ "${1:-}" = "--deps-only" ] || rm -f "$VOICE_VENV/.installed"   # --deps-only leaves a working install switched on
 [ -x "$VOICE_VENV/bin/python3" ] || python3 -m venv "$VOICE_VENV" || die "venv creation failed"
 VP="$VOICE_VENV/bin/python3"
 if ! "$VP" -c "import chatterbox.tts_turbo as t, inspect, pkg_resources; assert 'nano' in inspect.signature(t.ChatterboxTurboTTS.from_pretrained).parameters" 2>/dev/null; then
@@ -47,8 +50,11 @@ if ! "$VP" -c "import chatterbox.tts_turbo as t, inspect, pkg_resources; assert 
   "$VOICE_VENV/bin/pip" install -q --no-deps --force-reinstall "git+https://github.com/resemble-ai/chatterbox.git@$CHATTERBOX_COMMIT" \
     || die "chatterbox source install failed"
 fi
-"$VP" -c "import chatterbox.tts_turbo" 2>/dev/null || die "chatterbox does not import (see pip output above)"
+# Import the watermarker too: when its own imports fail, resemble-perth sets it to None instead of raising, and the
+# failure only shows up later, at model load ("'NoneType' object is not callable").
+"$VP" -c "import chatterbox.tts_turbo, perth; assert perth.PerthImplicitWatermarker is not None"   || die "chatterbox or its watermark (resemble-perth) does not import (see the error above)"
 ok "chatterbox installed ($(du -sh "$VOICE_VENV" | cut -f1))"
+[ "${1:-}" = "--deps-only" ] && { ok "--deps-only: packages install and import; stopping before the weights download"; exit 0; }
 
 log "4/5 model weights ($VOICE_ENGINE; first time downloads ~1-2 GB)"
 CUDA_VISIBLE_DEVICES="" "$VP" -c "

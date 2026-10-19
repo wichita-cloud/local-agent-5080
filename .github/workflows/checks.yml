@@ -1,0 +1,107 @@
+# Weekly (and on every push) checks that need no GPU. They catch what changes AFTER a release is tested: Python
+# packages that drift under loose pins, a model file renamed or removed on Hugging Face, a pinned npm or Docker
+# version that disappears, patches that stop applying. A red mark here means "fix it before a user hits it".
+# Speed and VRAM can't be checked here (no RTX 5080 in CI); bin/bench.sh on real hardware covers those.
+name: checks
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"     # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash syntax
+        run: for f in bin/*.sh guards/*.sh patches/*/apply.sh; do bash -n "$f" || exit 1; done
+      - name: shellcheck (errors only)
+        run: shellcheck -S error bin/*.sh guards/*.sh patches/*/apply.sh
+      - name: python compiles
+        run: python3 -m py_compile services/*.py console/server.py bin/mtp-graft.py patches/openclaw-*/*.py
+
+  memory-service-packages:
+    # bin/install.sh step 4, on the Ubuntu this was built on (22.04) and the next one (24.04, Python 3.12)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: venv + CPU torch + services/requirements.txt (as install.sh does)
+        run: |
+          python3 -m venv /tmp/venv
+          /tmp/venv/bin/pip install -q --upgrade pip
+          /tmp/venv/bin/pip install -q torch --index-url https://download.pytorch.org/whl/cpu
+          /tmp/venv/bin/pip install -q -r services/requirements.txt
+      - name: imports
+        run: /tmp/venv/bin/python3 -c "import chromadb, sentence_transformers, requests; print('ok')"
+
+  voice-packages:
+    # the real installer, stopping before the weights download (bin/voice-install.sh --deps-only)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: bin/voice-install.sh --deps-only
+
+  openclaw-patches:
+    # the pinned OpenClaw still installs from npm, and every patch still applies with the expected marker counts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: install the pinned openclaw (config/stack.env.example) into a scratch prefix
+        run: |
+          v=$(sed -n 's/^OPENCLAW_VERSION=\([^ ]*\).*/\1/p' config/stack.env.example)
+          npm install -q --prefix /tmp/oc "openclaw@$v"
+      - name: apply, then verify by marker count
+        env:
+          OPENCLAW_DIST: /tmp/oc/node_modules/openclaw/dist
+          OPENCLAW_WORKSPACE: /tmp/ws
+        run: |
+          mkdir -p /tmp/ws
+          patches/openclaw-*/apply.sh
+          patches/openclaw-*/apply.sh --check
+
+  downloads-and-images:
+    # every URL a profile downloads from still serves a file of the expected size; every pinned image still exists
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: model, projector and MTP-donor links
+        run: |
+          rc=0
+          size() { curl -sIL -m 60 "$1" | tr -d '\r' | awk 'tolower($1)=="content-length:"{v=$2} END{print v+0}'; }
+          for f in models/*.env; do
+            ( set -a; . "$f"; set +a
+              chk() { n=$(size "$1"); if [ "$n" -ge "$2" ]; then echo "ok   $f $1 ($n bytes)"; else echo "FAIL $f $1 ($n bytes, want >= $2)"; exit 1; fi; }
+              [ -n "${MODEL_URL:-}" ] && chk "$MODEL_URL" "$MIN_BYTES"
+              [ -n "${MMPROJ_URL:-}" ] && chk "$MMPROJ_URL" "${MMPROJ_MIN_BYTES:-1}"
+              if [ -n "${MTP_DONOR_URL:-}" ]; then   # bin/mtp-graft.py needs HTTP range requests on the donor
+                c=$(curl -s -o /dev/null -w '%{http_code}' -L -r 0-1023 -m 60 "$MTP_DONOR_URL")
+                [ "$c" = 206 ] && echo "ok   $f MTP donor serves byte ranges" || { echo "FAIL $f MTP donor range request: HTTP $c"; exit 1; }
+              fi
+              exit 0 ) || rc=1
+          done
+          exit $rc
+      - name: pinned llama.cpp images
+        run: |
+          rc=0
+          for img in $(sed -n 's/^LLAMA_IMAGE=\([^ ]*\).*/\1/p' config/stack.env.example) \
+                     $(sed -n 's/^LLAMA_IMAGE_PROFILE=\([^ ]*\).*/\1/p' models/*.env | sort -u); do
+            if docker manifest inspect "$img" >/dev/null 2>&1; then echo "ok   $img"; else echo "FAIL $img"; rc=1; fi
+          done
+          exit $rc
