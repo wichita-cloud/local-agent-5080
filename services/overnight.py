@@ -13,10 +13,16 @@ What a run does (all of it optional: whatever has nothing to work on is skipped)
      memories (exact words, reworded, and natural questions), then measures how often search finds the right memory.
      The trend is shown in the console. It is the early warning that retrieval got worse.
   2. Picks up to 3 things worth researching from your recent notes plus the topics you wrote in OVERNIGHT_TOPICS.
-  3. Searches the web for them with Brave (needs BRAVE_API_KEY), within a hard budget: OVERNIGHT_SEARCHES_PER_NIGHT per night
+  3. Searches the web for them with whichever provider is set up (see below), within a hard budget: OVERNIGHT_SEARCHES_PER_NIGHT per night
      and OVERNIGHT_MONTHLY_SEARCH_LIMIT per month, counted here. Stops on the first quota error. Reads the top page of each.
   4. Writes 3-5 ideas (what, why it fits your notes, a first step, sources) to workspace/overnight/<date>.md and to the
      console's Overnight tab. Ideas are NOT added to the agent's memory until you press Keep.
+
+Search providers (OVERNIGHT_SEARCH = auto | tavily | searxng | brave; auto picks the first that is set up, in that order):
+  * tavily   hosted, email sign-up, NO credit card, 1,000 free searches a month (TAVILY_API_KEY in config/secrets.env)
+  * searxng  a small Docker container on this PC (bin/searxng.sh up): no account at all; it asks Google/Bing/etc. itself
+  * brave    Brave Search API (BRAVE_API_KEY); needs a card on file for its monthly credit
+  With none of them the job still runs, from your notes only.
 
 Safety:
   * Web text is untrusted. It goes to the model as data with an instruction to ignore any commands in it, the model has no
@@ -47,6 +53,9 @@ LLAMA = "http://127.0.0.1:%s" % E("LLAMA_PORT", "9080")
 MEMORY = "http://127.0.0.1:%s" % E("MEMORY_PORT", "5766")
 BRAVE_URL = E("BRAVE_API_URL", "https://api.search.brave.com/res/v1/web/search")
 BRAVE_KEY = E("BRAVE_API_KEY", "")
+TAVILY_KEY = E("TAVILY_API_KEY", "")
+TAVILY_URL = E("TAVILY_API_URL", "https://api.tavily.com/search")
+SEARXNG_URL = E("SEARXNG_URL", "http://127.0.0.1:%s" % E("SEARXNG_PORT", "18888"))
 GAME_FLAG = E("GAME_FLAG", os.path.join(STATE, "game-mode.flag"))
 LOG = os.path.join(STATE, "overnight.log")
 
@@ -258,6 +267,14 @@ def note_search(night):
     jsave(usage_path(), u)
 
 
+def _http_error_stop(provider, e):
+    if e.code in (402, 429, 432, 433):
+        raise QuotaStop("%s answered %d (quota or rate limit)" % (provider, e.code))
+    if e.code in (401, 403):
+        raise QuotaStop("%s rejected the request (%d): check the key or the setup" % (provider, e.code))
+    raise e
+
+
 def brave(query):
     """-> list of {title,url,description}; raises QuotaStop when Brave says the quota/rate is used up."""
     url = BRAVE_URL + "?" + urllib.parse.urlencode({"q": query[:300], "count": 5, "safesearch": "strict"})
@@ -266,11 +283,69 @@ def brave(query):
         with urllib.request.urlopen(req, timeout=30) as r:
             d = json.loads(r.read())
     except urllib.error.HTTPError as e:
-        if e.code in (402, 429):
-            raise QuotaStop("Brave answered %d (quota or rate limit)" % e.code)
-        raise
+        _http_error_stop("Brave", e)
     return [{"title": str(x.get("title", ""))[:200], "url": str(x.get("url", "")), "description": re.sub(r"<[^>]+>", "", str(x.get("description", "")))[:400]}
             for x in (d.get("web", {}).get("results") or [])[:5] if str(x.get("url", "")).startswith(("http://", "https://"))]
+
+
+def tavily(query):
+    """Tavily Search API (https://docs.tavily.com): POST /search, Bearer key; 429/432/433 mean rate or plan limit."""
+    req = urllib.request.Request(TAVILY_URL, json.dumps({"query": query[:300], "max_results": 5, "search_depth": "basic", "include_answer": False}).encode(),
+                                 {"Content-Type": "application/json", "Authorization": "Bearer " + TAVILY_KEY})
+    try:
+        with urllib.request.urlopen(req, timeout=40) as r:
+            d = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        _http_error_stop("Tavily", e)
+    return [{"title": str(x.get("title", ""))[:200], "url": str(x.get("url", "")), "description": re.sub(r"\s+", " ", str(x.get("content", "")))[:400]}
+            for x in (d.get("results") or [])[:5] if str(x.get("url", "")).startswith(("http://", "https://"))]
+
+
+_searx_empty = {"n": 0}
+
+
+def searxng(query):
+    """A local SearXNG container (bin/searxng.sh). It asks several search engines itself; some may refuse this PC for a while, which is normal."""
+    url = SEARXNG_URL + "/search?" + urllib.parse.urlencode({"q": query[:300], "format": "json", "safesearch": 1})
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"Accept": "application/json"}), timeout=40) as r:
+            d = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        _http_error_stop("SearXNG", e)
+    except (urllib.error.URLError, OSError):
+        raise QuotaStop("SearXNG isn't running (bin/searxng.sh up)")
+    out = [{"title": str(x.get("title", ""))[:200], "url": str(x.get("url", "")), "description": re.sub(r"\s+", " ", str(x.get("content", "")))[:400]}
+           for x in (d.get("results") or []) if str(x.get("url", "")).startswith(("http://", "https://"))][:5]
+    _searx_empty["n"] = 0 if out else _searx_empty["n"] + 1
+    if _searx_empty["n"] >= 2:
+        raise QuotaStop("SearXNG got nothing twice in a row: the search engines may be rate-limiting this PC; try again tomorrow")
+    return out
+
+
+def searxng_up():
+    try:
+        urllib.request.urlopen(SEARXNG_URL + "/healthz", timeout=3)
+        return True
+    except urllib.error.HTTPError:
+        return True          # answered (some versions have no /healthz)
+    except Exception:
+        return False
+
+
+def providers():
+    return {"tavily": bool(TAVILY_KEY), "brave": bool(BRAVE_KEY), "searxng": searxng_up()}
+
+
+def provider_choice(avail=None):
+    """The provider to use tonight: OVERNIGHT_SEARCH if set and usable, else the first one set up (tavily, brave, searxng), else ''."""
+    avail = avail or providers()
+    pref = E("OVERNIGHT_SEARCH", "auto")
+    if pref in avail:
+        return pref if avail[pref] else ""
+    return next((p for p in ("tavily", "brave", "searxng") if avail[p]), "")
+
+
+SEARCH = {"tavily": tavily, "brave": brave, "searxng": searxng}
 
 
 class QuotaStop(Exception):
@@ -375,11 +450,12 @@ def research_and_ideas(c, night, deadline, test=False):
     if not topics:
         return {"status": "no topics", "detail": "the model didn't produce research topics (see the log)"}
     findings, searches, quota_note = [], 0, ""
+    prov = provider_choice()
     for t in topics:
         item = {"topic": str(t.get("topic", t["query"]))[:120], "query": t["query"][:200], "results": []}
-        if BRAVE_KEY and can_search(c, night) and not quota_note and not (test and searches >= 2):
+        if prov and can_search(c, night) and not quota_note and not (test and searches >= 2):
             try:
-                item["results"] = brave(t["query"])
+                item["results"] = SEARCH[prov](t["query"])
                 note_search(night)
                 searches += 1
             except QuotaStop as e:
@@ -388,8 +464,8 @@ def research_and_ideas(c, night, deadline, test=False):
                 log("search failed: %s" % type(e).__name__)
             if item["results"]:
                 item["page"] = page_text(item["results"][0]["url"])
-        elif not BRAVE_KEY:
-            quota_note = "no search key (BRAVE_API_KEY): ideas come from your notes only"
+        elif not prov:
+            quota_note = "no web search is set up (Tavily, SearXNG or Brave): ideas come from your notes only"
         elif not quota_note:
             u = usage_now()
             quota_note = ("the monthly search limit (%d) is used up" % c["per_month"]) if u["count"] >= c["per_month"] else ("tonight's search budget (%d) is used up" % c["per_night"])
@@ -415,8 +491,8 @@ def research_and_ideas(c, night, deadline, test=False):
     ideas = make_ideas(False) or make_ideas(True)
     if not ideas:
         return {"status": "no ideas", "detail": "the model's reply couldn't be used twice in a row (see the log); the topics were researched, so try Run again later",
-                "topics": [f["topic"] for f in findings], "searches": searches, "notes_used": nfiles, "quota_note": quota_note}
-    return {"status": "ok", "ideas": ideas, "topics": [f["topic"] for f in findings], "searches": searches, "notes_used": nfiles, "quota_note": quota_note}
+                "topics": [f["topic"] for f in findings], "searches": searches, "notes_used": nfiles, "quota_note": quota_note, "provider": prov}
+    return {"status": "ok", "provider": prov, "ideas": ideas, "topics": [f["topic"] for f in findings], "searches": searches, "notes_used": nfiles, "quota_note": quota_note}
 
 
 def write_markdown(night, run):
@@ -510,7 +586,8 @@ def status():
         hist = [json.loads(l) for l in open(os.path.join(ODIR, "memory-check.jsonl")) if l.strip()][-14:]
     except OSError:
         pass
-    return {"settings": c, "key_set": bool(BRAVE_KEY), "in_window": in_window(c), "done_tonight": st.get("done_night") == night, "running": bool(st.get("running")),
+    avail = providers()
+    return {"settings": c, "key_set": bool(BRAVE_KEY), "providers": avail, "provider": provider_choice(avail), "search_pref": E("OVERNIGHT_SEARCH", "auto"), "in_window": in_window(c), "done_tonight": st.get("done_night") == night, "running": bool(st.get("running")),
             "waiting": st.get("waiting", "") if in_window(c) and c["on"] else "", "last": last, "usage": {"month": u["count"], "tonight": u["nights"].get(night, 0)},
             "memory_history": hist, "state": {k: st.get(k) for k in ("last_status", "last_finished", "last_detail")}}
 
@@ -541,6 +618,21 @@ def set_idea(idea_id, state):
     return 1
 
 
+def _provider_cases():
+    keep = os.environ.get("OVERNIGHT_SEARCH")
+    got = []
+    for pref, avail in (("auto", {"tavily": True, "brave": True, "searxng": True}), ("auto", {"tavily": False, "brave": True, "searxng": True}),
+                        ("auto", {"tavily": False, "brave": False, "searxng": True}), ("auto", {"tavily": False, "brave": False, "searxng": False}),
+                        ("searxng", {"tavily": True, "brave": False, "searxng": False}), ("brave", {"tavily": True, "brave": True, "searxng": True})):
+        os.environ["OVERNIGHT_SEARCH"] = pref
+        got.append(provider_choice(avail))
+    if keep is None:
+        os.environ.pop("OVERNIGHT_SEARCH", None)
+    else:
+        os.environ["OVERNIGHT_SEARCH"] = keep
+    return got == ["tavily", "brave", "searxng", "", "", "brave"]
+
+
 def selftest():
     """Checks that need no model, network or GPU (the weekly GitHub check runs this)."""
     d = lambda h, mi=0: dt.datetime(2026, 10, 19, h, mi)   # noqa: E731
@@ -554,6 +646,7 @@ def selftest():
         ("private and local addresses are never fetched", not any(public_host(u) for u in ("http://127.0.0.1/", "http://localhost:80/", "http://10.0.0.5/", "http://172.16.0.9/",
                                                                                           "http://169.254.169.254/latest", "http://[::1]/", "file:///etc/passwd", "ftp://example.com/"))),
         ("a cut-off JSON list keeps its complete items", [x["title"] for x in (parse_json('Here: [{"title": "a", "idea": "x"}, {"title": "b", "idea": "y"}, {"title": "c", "idea', list) or [])] == ["a", "b"]),
+        ("search provider choice: auto prefers a keyed provider, then the local one, else none", _provider_cases()),
         ("JSON inside prose and fences", parse_json("Sure!" + chr(10) + "`" * 3 + "json" + chr(10) + '{"k": 1}' + chr(10) + "`" * 3, dict) == {"k": 1}),
     ]
     bad = [name for name, ok in checks if not ok]

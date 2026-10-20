@@ -96,6 +96,7 @@ details.adv{margin-top:8px}details.adv summary{font-size:13px;color:var(--mut)}
 .advrow:first-of-type{border-top:0}.advrow label{margin:0;font-size:13px;font-weight:600}
 .advrow input,.advrow select{padding:4px 7px}.advrow.changed label::after{content:" •";color:var(--warn)}
 @media (max-width:640px){.advrow{grid-template-columns:1fr 110px}.advrow .small{grid-column:1/-1}}
+.provbox{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:10px}.provh{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .ovsw{display:flex;gap:8px;align-items:center;font-weight:600;margin:0;color:var(--fg);font-size:15px}.ovsw input{width:auto;transform:scale(1.4)}
 .idea{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--panel)}.idea.done{opacity:.65}
 .secopts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -314,7 +315,7 @@ details.adv{margin-top:8px}details.adv summary{font-size:13px;color:var(--mut)}
       <li><b>It searches the web within a hard budget</b> (searches per night and per month, below), reads the top page of each, and writes 3 to 5 ideas with sources.</li>
       <li><b>You decide what stays.</b> Ideas wait here. Press <i>Keep</i> to add one to the agent's memory; nothing goes in on its own.</li>
     </ol>
-    <p class="small mut" style="margin-bottom:0">Everything stays on this PC except the search itself (the search words go to Brave). Web text is treated as untrusted: this job gives the model no tools and ignores any instructions found on a page.</p>
+    <p class="small mut" style="margin-bottom:0">Everything stays on this PC except the search itself (the search words go to the search provider you pick, or to the public search engines if you use SearXNG). Web text is treated as untrusted: this job gives the model no tools and ignores any instructions found on a page.</p>
   </div>
 
   <div class="card">
@@ -344,24 +345,34 @@ details.adv{margin-top:8px}details.adv summary{font-size:13px;color:var(--mut)}
     </div>
     <div class="card">
       <h2 style="margin-top:0">Web searches</h2>
-      <p class="small mut" style="margin-top:-4px">Uses the Brave Search API. Many plans have a monthly free quota, so these limits are hard stops, counted here.</p>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <p class="small mut" style="margin-top:-4px">Pick how it searches the web. All three below work with no credit card except Brave. Without any, it still runs from your notes.</p>
+      <label for="ovProv">Search with</label>
+      <select id="ovProv"><option value="auto">Automatic (the first one that is set up)</option><option value="tavily">Tavily</option><option value="searxng">SearXNG on this PC</option><option value="brave">Brave</option></select>
+
+      <div class="provbox"><div class="provh"><b>SearXNG on this PC</b> <span class="tag" id="ovSearxTag">not set up</span> <span class="tag on">no account</span></div>
+        <p class="small mut" style="margin:4px 0">A private search service in a small Docker container (about 380 MB, loopback only). It asks Google, Bing and others itself, so there is nothing to sign up for. Some engines may refuse for a while; others answer.</p>
+        <div class="btns" style="margin-top:6px"><button class="b pri needsidle" id="ovSearxUp">Set up SearXNG</button><button class="b needsidle" id="ovSearxDown">Stop it</button></div></div>
+
+      <div class="provbox"><div class="provh"><b>Tavily</b> <span class="tag" id="ovTavTag">no key</span> <span class="tag on">no card</span></div>
+        <p class="small mut" style="margin:4px 0">Sign up with an email address; 1,000 free searches a month. Search results come back ready for an AI to read.</p>
+        <div style="display:flex;gap:8px"><input id="ovTavKey" type="password" autocomplete="off" placeholder="paste your Tavily key (tvly-...)"><button class="b needsidle" id="ovTavSave">Save key</button></div>
+        <details style="margin-top:6px"><summary>How do I get a Tavily key? (2 minutes)</summary>
+          <ol class="small" style="line-height:1.6;margin:8px 0 0"><li>Go to <span class="mono">tavily.com</span> and create a free account (email only).</li><li>Copy the API key shown on your dashboard (it starts with <span class="mono">tvly-</span>).</li><li>Paste it above and press <i>Save key</i>.</li></ol></details></div>
+
+      <details class="provbox"><summary><b>Brave</b> (needs a card on file for its monthly credit)</summary>
+        <div style="display:flex;gap:8px;margin-top:8px"><input id="ovKey" type="password" autocomplete="off" placeholder="paste your Brave key"><button class="b needsidle" id="ovKeySave">Save key</button></div>
+        <p class="small mut" style="margin:6px 0 0" id="ovKeyLabel"></p>
+        <ol class="small" style="line-height:1.6;margin:8px 0 0">
+          <li>Create an account on Brave's API dashboard: <span class="mono">api-dashboard.search.brave.com</span>.</li>
+          <li>Pick a <b>Search</b> plan. At the time of writing Brave gives about <b>$5 of credit every month</b> (roughly 1,000 searches) and asks for a payment card on file to receive it. <b>Read the pricing page first</b>, and set a usage limit in the dashboard.</li>
+          <li>Create an API key in the dashboard (<i>API Keys</i>), paste it above and press <i>Save key</i>. It also turns on the agent's own web search.</li></ol></details>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
         <div><label for="ovPerNight">Most per night</label><input id="ovPerNight" type="number" min="0" max="100"></div>
         <div><label for="ovPerMonth">Most per month</label><input id="ovPerMonth" type="number" min="0" max="100000"></div>
       </div>
       <div class="stat" style="margin-top:12px"><div class="k">Searches used</div><div class="v" id="ovUsage">–</div><div class="meter"><i id="ovMeter" style="width:0"></i></div>
-        <div class="d">This job only. The agent's own web searches in the daytime use the same Brave quota, so keep the monthly limit below your plan's total.</div></div>
-      <label for="ovKey" id="ovKeyLabel">Brave Search API key</label>
-      <div style="display:flex;gap:8px"><input id="ovKey" type="password" autocomplete="off" placeholder="paste your key"><button class="b needsidle" id="ovKeySave">Save key</button></div>
-      <p class="small mut" style="margin:4px 0 0">It is saved in <span class="mono">config/secrets.env</span> (only you can read it). Without a key the job still runs, using your notes only.</p>
-      <details style="margin-top:8px"><summary>How do I get a key? (about 5 minutes)</summary>
-        <ol class="small" style="line-height:1.6;margin:8px 0 0">
-          <li>Create an account on Brave's API dashboard: <span class="mono">api-dashboard.search.brave.com</span> (the product page is <span class="mono">brave.com/search/api</span>).</li>
-          <li>Pick a <b>Search</b> plan. At the time of writing Brave gives about <b>$5 of credit every month</b> (roughly 1,000 searches) and asks for a payment card on file to receive it; some older accounts keep a free plan of 2,000 queries a month. <b>Brave has changed this more than once, so read the pricing page first</b>, and set a usage limit in the dashboard so you can never be charged beyond the credit.</li>
-          <li>Create an API key in the dashboard (<i>API Keys</i>) and copy it.</li>
-          <li>Paste it above and press <i>Save key</i>.</li>
-          <li>Set "Most per month" to less than your plan's quota, leaving room for the agent's own daytime searches, which use the same quota.</li>
-        </ol></details>
+        <div class="d">Counted by this job only. If you also use the same provider for the agent's own searches, keep the monthly limit below your quota.</div></div>
     </div>
   </div>
   <div class="btns" style="margin:0 0 16px"><button class="b pri" id="ovSave">Save settings</button></div>
@@ -613,7 +624,7 @@ async function startJob(kind, extra = {}) {
   try { await api("/api/job", {kind, ...extra}); } catch (e) { toast(e.message); return; }
   jobOffset = 0; $("#actLog").textContent = ""; $("#activity").hidden = false; $("#activity").classList.remove("min");
   $("#actTitle").textContent = {bench: "Benchmark", verify: "Full verify", switch: "Switching model", download: "Downloading model",
-    up: "Bringing everything up", gateway: "Restarting the agent", ingest: "Re-indexing notes", tune: "Applying model settings", "voice-install": "Installing voice", "voice-use": "Changing the agent's voice", "overnight-test": "Testing the overnight job", "overnight-run": "Running the overnight job", "security-profile": "Changing the security profile", "security-network": "Changing sandbox internet access", "security-share-add": "Sharing a folder", "security-share-remove": "Removing a shared folder"}[kind] || kind;
+    up: "Bringing everything up", gateway: "Restarting the agent", ingest: "Re-indexing notes", tune: "Applying model settings", "voice-install": "Installing voice", "voice-use": "Changing the agent's voice", "overnight-test": "Testing the overnight job", "searxng-up": "Setting up SearXNG", "searxng-down": "Stopping SearXNG", "overnight-run": "Running the overnight job", "security-profile": "Changing the security profile", "security-network": "Changing sandbox internet access", "security-share-add": "Sharing a folder", "security-share-remove": "Removing a shared folder"}[kind] || kind;
   setJobButtons(true); pollJob();
 }
 async function pollJob() {
@@ -1005,7 +1016,10 @@ async function loadOvernight(keepForm) {
     $("#ovStart").value = s.start; $("#ovEnd").value = s.end; $("#ovIdle").value = s.idle; $("#ovTopics").value = s.topics;
     $("#ovPerNight").value = s.per_night; $("#ovPerMonth").value = s.per_month;
   }
-  $("#ovKeyLabel").textContent = o.key_set ? "Brave Search API key (saved)" : "Brave Search API key (not set)";
+  $("#ovKeyLabel").textContent = o.providers.brave ? "A Brave key is saved." : "No Brave key saved.";
+  const chip = (el, ok, yes, no) => { el.textContent = ok ? yes : no; el.classList.toggle("on", ok); };
+  chip($("#ovSearxTag"), o.providers.searxng, "running", "not set up"); chip($("#ovTavTag"), o.providers.tavily, "key saved", "no key");
+  if (!keepForm) $("#ovProv").value = o.search_pref || "auto";
   let st;
   if (!s.on) st = "Off. Switch it on and choose your hours; it only works while you're away.";
   else if (o.running) st = "Working right now…";
@@ -1038,7 +1052,7 @@ async function ovSave() {
   const set = (key, value) => api("/api/overnight/settings", {key, value: String(value)});
   try {
     await set("OVERNIGHT_START", $("#ovStart").value); await set("OVERNIGHT_END", $("#ovEnd").value); await set("OVERNIGHT_IDLE_MINUTES", $("#ovIdle").value);
-    await set("OVERNIGHT_TOPICS", $("#ovTopics").value); await set("OVERNIGHT_SEARCHES_PER_NIGHT", $("#ovPerNight").value); await set("OVERNIGHT_MONTHLY_SEARCH_LIMIT", $("#ovPerMonth").value);
+    await set("OVERNIGHT_TOPICS", $("#ovTopics").value); await set("OVERNIGHT_SEARCH", $("#ovProv").value); await set("OVERNIGHT_SEARCHES_PER_NIGHT", $("#ovPerNight").value); await set("OVERNIGHT_MONTHLY_SEARCH_LIMIT", $("#ovPerMonth").value);
     toast("Saved"); loadOvernight();
   } catch (e) { toast(e.message); }
 }
@@ -1046,8 +1060,10 @@ $("#ovSave").onclick = ovSave;
 $("#ovOn").onchange = async () => { try { await api("/api/overnight/settings", {key: "OVERNIGHT", value: $("#ovOn").checked ? "on" : "off"}); await ovSave(); } catch (e) { toast(e.message); loadOvernight(); } };
 $("#ovTest").onclick = () => startJob("overnight-test");
 $("#ovRun").onclick = () => { if (confirm("Run tonight's job now? It uses the GPU for a few minutes, and the agent's replies will be slower while it runs.")) startJob("overnight-run"); };
-$("#ovKeySave").onclick = async () => { const k = $("#ovKey").value.trim(); if (!k) return toast("Paste the key first");
-  try { await api("/api/overnight/key", {key: k}); $("#ovKey").value = ""; toast("Key saved"); loadOvernight(true); } catch (e) { toast(e.message); } };
+const saveKey = (provider, inputSel) => async () => { const k = $(inputSel).value.trim(); if (!k) return toast("Paste the key first");
+  try { await api("/api/overnight/key", {provider, key: k}); $(inputSel).value = ""; toast("Key saved"); loadOvernight(true); } catch (e) { toast(e.message); } };
+$("#ovKeySave").onclick = saveKey("brave", "#ovKey"); $("#ovTavSave").onclick = saveKey("tavily", "#ovTavKey");
+$("#ovSearxUp").onclick = () => startJob("searxng-up"); $("#ovSearxDown").onclick = () => startJob("searxng-down");
 document.addEventListener("click", async e => { const b = e.target.closest("[data-ovidea]"); if (!b) return; b.disabled = true;
   try { await api("/api/overnight/idea", {id: b.dataset.id, action: b.dataset.ovidea}); toast(b.dataset.ovidea === "keep" ? "Kept: it will be searchable after the next indexing (nightly, or Re-index notes)" : "Dismissed"); loadOvernight(true); } catch (er) { toast(er.message); b.disabled = false; } });
 

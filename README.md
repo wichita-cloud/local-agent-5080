@@ -65,7 +65,7 @@ measured on that one.
 | Web console | `http://localhost:18800`: is it running optimally, switch or download models, edit the agent's character |
 | Switching models | one click in the console, or `bin/model.sh use <profile>`; nothing else needs editing |
 | Voice (optional add-on) | talk to the agent with the microphone (local speech-to-text) and hear it answer in a voice you choose or clone from a 10-30 s recording; all local, on spare CPU cores ([docs/VOICE.md](docs/VOICE.md)) |
-| Overnight work (optional, **very beta**) | while you're away, uses the idle GPU to research your project topics (web searches within a monthly budget you set) and have a few ideas ready each morning; you choose the hours and what to keep ([docs/OVERNIGHT.md](docs/OVERNIGHT.md)) |
+| Overnight work (optional, **very beta**) | while you're away, uses the idle GPU to research your project topics (web searches within a monthly budget you set; works with no account and no card) and have a few ideas ready each morning; you choose the hours and what to keep ([docs/OVERNIGHT.md](docs/OVERNIGHT.md)) |
 | Safer by default | at install you choose **Protected**: the agent's commands run in a Docker sandbox that sees only its own workspace and the folders you share, with no internet and no access to your Windows drives ([docs/SECURITY.md](docs/SECURITY.md)) |
 | Fine-tuning (optional) | hidden under **Advanced** on each model: temperature and other sampling settings, context length, thinking. Each model keeps its own |
 | Your own character | the agent's name, personality and rules are plain Markdown files you edit in the console. It ships neutral |
@@ -82,6 +82,7 @@ Only one, and it's optional. There are no cloud model keys and no subscription.
 
 | Service | Account? | Used for |
 |---|---|---|
+| **Search for the overnight job** | **optional** | no-account SearXNG on this PC, or a Tavily key (email sign-up, no card, 1,000 free searches a month); details in [docs/OVERNIGHT.md](docs/OVERNIGHT.md) |
 | **Brave Search API** | **optional** | the agent's web search. At the time of writing, the Search plan includes $5 of free credit a month (about 1,000 searches) and asks for a card to prevent abuse; check the current terms at [brave.com/search/api](https://brave.com/search/api/). Without a key the agent can still read any page you give it a link to |
 | Hugging Face | no | model downloads are public files |
 | GitHub | no | cloning is anonymous |

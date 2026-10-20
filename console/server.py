@@ -778,7 +778,7 @@ def _safe_arg(s, what):
     return s
 
 
-OVERNIGHT_KEYS = {"OVERNIGHT", "OVERNIGHT_START", "OVERNIGHT_END", "OVERNIGHT_IDLE_MINUTES", "OVERNIGHT_TOPICS",
+OVERNIGHT_KEYS = {"OVERNIGHT", "OVERNIGHT_SEARCH", "OVERNIGHT_START", "OVERNIGHT_END", "OVERNIGHT_IDLE_MINUTES", "OVERNIGHT_TOPICS",
                   "OVERNIGHT_SEARCHES_PER_NIGHT", "OVERNIGHT_MONTHLY_SEARCH_LIMIT"}
 
 
@@ -810,6 +810,8 @@ JOBS = {
     "tune": tune_args,
     "voice-install": lambda d: [os.path.join(BIN, "voice-install.sh")],
     "voice-use": lambda d: [os.path.join(BIN, "voice.sh"), "use", _slug(d.get("voice"))],
+    "searxng-up": lambda d: [os.path.join(BIN, "searxng.sh"), "up"],
+    "searxng-down": lambda d: [os.path.join(BIN, "searxng.sh"), "down"],
     "overnight-test": lambda d: [os.path.join(BIN, "overnight.sh"), "test"],
     "overnight-run": lambda d: [os.path.join(BIN, "overnight.sh"), "run"],
     "security-profile": lambda d: [os.path.join(BIN, "security.sh"), "set", d.get("profile") if d.get("profile") in ("protected", "standard") else _bad("profile")],
@@ -972,7 +974,9 @@ class H(BaseHTTPRequestHandler):
                 overnight_cmd("set", k, str(d.get("value", "")))
                 return self._send(200, {"ok": True})
             if path == "/api/overnight/key":
-                overnight_cmd("set-key", stdin=str(d.get("key", "")).strip() + "\n")
+                if d.get("provider") not in ("tavily", "brave"):
+                    raise ValueError("unknown provider")
+                overnight_cmd("set-key", d["provider"], stdin=str(d.get("key", "")).strip() + "\n")
                 return self._send(200, {"ok": True})
             if path == "/api/overnight/idea":
                 if d.get("action") not in ("keep", "dismiss"):

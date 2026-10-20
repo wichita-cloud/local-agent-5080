@@ -105,12 +105,31 @@ elif [ -t 0 ] || { : </dev/tty; } 2>/dev/null; then
 
 Overnight research (VERY BETA, optional): while you're away, the agent can use the idle GPU to research the projects in
 your notes and have a few ideas ready each morning. It only reads your notes and writes suggestions to a separate folder;
-nothing enters its memory unless you keep an idea. Web research needs a free-to-start Brave Search key (docs/OVERNIGHT.md).
+nothing enters its memory unless you keep an idea. Web research needs a search option; there are ones that need no card (next question).
 You can switch it on or off any time in the console's Overnight tab.
 
 TXT
   printf 'Turn on overnight research now? [y/N]: ' >/dev/tty; read -r a </dev/tty || a=n
-  case "$a" in [yY]*) "$REPO/bin/overnight.sh" set OVERNIGHT on && ok "overnight research is on (01:00-06:00; change it in the Overnight tab)";; *) "$REPO/bin/overnight.sh" set OVERNIGHT off >/dev/null; ok "overnight research stays off";; esac
+  case "$a" in
+    [yY]*)
+      "$REPO/bin/overnight.sh" set OVERNIGHT on && ok "overnight research is on (01:00-06:00; change it in the Overnight tab)"
+      cat >/dev/tty <<'TXT'
+
+How should it search the web? (It works without, from your notes only. You can change this later in the Overnight tab.)
+  1) SearXNG on this PC   no account, no key, no card; runs a small Docker container (about 380 MB)
+  2) Tavily               sign up with an email, no card, 1,000 free searches a month (you paste a key later)
+  3) Brave                needs a payment card on file for its monthly credit
+  4) Skip for now
+TXT
+      printf 'Choose 1-4 [1]: ' >/dev/tty; read -r b </dev/tty || b=1
+      case "${b:-1}" in
+        2) "$REPO/bin/overnight.sh" set OVERNIGHT_SEARCH tavily >/dev/null; echo "Get a free key at tavily.com, then paste it in the console's Overnight tab (docs/OVERNIGHT.md).";;
+        3) "$REPO/bin/overnight.sh" set OVERNIGHT_SEARCH brave >/dev/null; echo "How to get a Brave key: docs/OVERNIGHT.md.";;
+        4) ;;
+        *) "$REPO/bin/searxng.sh" up || warn "SearXNG didn't start; you can set it up later in the console's Overnight tab";;
+      esac ;;
+    *) "$REPO/bin/overnight.sh" set OVERNIGHT off >/dev/null; ok "overnight research stays off" ;;
+  esac
 else
   "$REPO/bin/overnight.sh" set OVERNIGHT off >/dev/null; ok "overnight research stays off (unattended install; switch it on in the console's Overnight tab)"
 fi

@@ -107,6 +107,10 @@ jobs:
             if docker manifest inspect "$img" >/dev/null 2>&1; then echo "ok   $img"; else echo "FAIL $img"; rc=1; fi
           done
           exit $rc
+      - name: pinned SearXNG image (bin/searxng.sh)
+        run: |
+          img=$(grep -o 'searxng/searxng@sha256:[0-9a-f]*' bin/searxng.sh | head -1)
+          echo "$img"; test -n "$img" && docker manifest inspect "$img" >/dev/null
 
   sandbox-image:
     # The Protected profile's sandbox image must keep building (the base image and Debian packages drift), and must run as a

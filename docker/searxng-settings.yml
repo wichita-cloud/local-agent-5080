@@ -1,0 +1,16 @@
+# SearXNG settings for bin/searxng.sh (a private search service for this PC; see that script). The secret key is generated
+# per install (it only signs this instance's own cookies, which this setup doesn't use).
+use_default_settings: true
+general:
+  instance_name: "local-agent search"
+  enable_metrics: false
+server:
+  secret_key: "__SECRET__"
+  limiter: false            # bot detection is for public instances; this one only answers this PC
+  public_instance: false
+  image_proxy: false
+search:
+  safe_search: 1            # moderate
+  formats:                  # JSON is what the overnight job reads (SearXNG ships with html only)
+    - html
+    - json
