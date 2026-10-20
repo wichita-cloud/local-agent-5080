@@ -10,6 +10,7 @@
 #   bin/voice.sh use <name>                   the voice the agent speaks with (sets VOICE_NAME, reconfigures OpenClaw)
 #   bin/voice.sh say "<text>" [voice] [out]   speak text to a file (default $STATE_DIR/voice-say.mp3) and report speed
 #   bin/voice.sh talk "<message>"             send a message to the agent (its own "voice" conversation); print the reply
+#   bin/voice.sh listen <audio-file>          transcribe a recording with the local speech-to-text and print the words
 #   bin/voice.sh wait                         wait until the voice model has loaded (up to 5 minutes)
 set -u
 . "$(dirname "$0")/lib.sh"
@@ -95,5 +96,8 @@ def texts(x):
 p = d.get("result", d).get("payloads") if isinstance(d.get("result", d), dict) else None
 out = [t for t in texts(p if p is not None else d) if t.strip()]
 print("\n\n".join(out) if out else "")' ;;
-  *) die "usage: bin/voice.sh status|list|add|remove|use|say|talk|wait" ;;
+  listen)
+    [ -f "$VOICE_VENV/.stt-installed" ] || die "speech-to-text isn't installed: run bin/voice-install.sh"
+    exec "$REPO/bin/stt-cli.sh" "${2:-}" ;;
+  *) die "usage: bin/voice.sh status|list|add|remove|use|say|listen|talk|wait" ;;
 esac

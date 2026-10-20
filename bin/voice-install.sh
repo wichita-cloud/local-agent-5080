@@ -7,7 +7,8 @@
 #   3. CPU-only PyTorch, then Chatterbox: the released package for its dependencies, then the pinned source commit
 #      that adds the fast "nano" model (not in a PyPI release yet)
 #   4. download the model weights once (Hugging Face, public; no account)
-#   5. start the voice server and point OpenClaw's spoken replies at it
+#      (also faster-whisper, for speech-to-text: you speak to the agent; the small.en model is ~500 MB)
+#   5. start the voice and speech-to-text servers and point OpenClaw at them (spoken replies, voice notes in)
 #
 # --deps-only: steps 1-3 and an import check, then stop (no weights, nothing started). The weekly GitHub check uses it
 # to catch upstream package changes before a user does.
@@ -18,6 +19,7 @@ set -u
 
 CHATTERBOX_VERSION=0.1.7
 CHATTERBOX_COMMIT=5de7a54aa4e5e2baadb0182dde554908b48b85c2   # resemble-ai/chatterbox master, 2026-10-17: adds nano=True
+FASTER_WHISPER_VERSION=1.1.1                                  # speech-to-text; ships its own audio decoder (PyAV) and CTranslate2
 TORCH_VERSION=2.6.0                                           # what chatterbox-tts 0.1.7 pins
 
 log "1/5 apt packages (ffmpeg, git)"
@@ -54,6 +56,12 @@ fi
 # failure only shows up later, at model load ("'NoneType' object is not callable").
 "$VP" -c "import chatterbox.tts_turbo, perth; assert perth.PerthImplicitWatermarker is not None"   || die "chatterbox or its watermark (resemble-perth) does not import (see the error above)"
 ok "chatterbox installed ($(du -sh "$VOICE_VENV" | cut -f1))"
+# speech-to-text for the other direction (you talking to the agent). Pure pip wheels, no PyTorch needed.
+if ! "$VP" -c "import faster_whisper" 2>/dev/null; then
+  "$VOICE_VENV/bin/pip" install -q "faster-whisper==$FASTER_WHISPER_VERSION" || die "faster-whisper install failed"
+fi
+"$VP" -c "import faster_whisper" || die "faster-whisper does not import (see the error above)"
+ok "faster-whisper installed"
 [ "${1:-}" = "--deps-only" ] && { ok "--deps-only: packages install and import; stopping before the weights download"; exit 0; }
 
 log "4/5 model weights ($VOICE_ENGINE; first time downloads ~1-2 GB)"
@@ -63,14 +71,26 @@ ChatterboxTurboTTS.from_pretrained(device='cpu', nano=('$VOICE_ENGINE' == 'nano'
   || die "could not download/load the voice model (network, disk, or a broken package: run the same python line by hand to see the error). Re-run this script"
 ok "weights cached"
 touch "$VOICE_VENV/.installed"
+log "4b/5 speech-to-text model ($STT_MODEL)"
+if CUDA_VISIBLE_DEVICES="" "$VP" -c "
+from faster_whisper import WhisperModel
+WhisperModel('$STT_MODEL', device='cpu', compute_type='int8')" >/dev/null 2>&1; then
+  touch "$VOICE_VENV/.stt-installed"; ok "speech-to-text model cached"
+else
+  rm -f "$VOICE_VENV/.stt-installed"; warn "could not download the speech-to-text model (network?). Spoken replies work; speaking to the agent won't until you re-run this script"
+fi
 
 log "5/5 start"
 mkdir -p "$VOICE_DIR"
 "$REPO/bin/services-up.sh" >/dev/null 2>&1
 "$REPO/bin/voice.sh" wait || die "voice server didn't come up (tail $STATE_DIR/voice-server.log)"
+if [ -f "$VOICE_VENV/.stt-installed" ]; then
+  for _ in $(seq 1 60); do curl -s -m 2 "http://127.0.0.1:$STT_PORT/health" | grep -q '"ok"' && break; sleep 1; done
+  curl -s -m 2 "http://127.0.0.1:$STT_PORT/health" | grep -q '"ok"' && ok "speech-to-text running (model $STT_MODEL)" || warn "speech-to-text didn't answer (tail $STATE_DIR/stt-server.log)"
+fi
 "$REPO/bin/gateway-up.sh" >/dev/null 2>&1
 # read it back: a rejected config value leaves the old setting in place without failing gateway-up
 got=$(openclaw config get messages.tts.openai.baseUrl 2>/dev/null | tr -d '"[:space:]')
 [ "$got" = "http://127.0.0.1:$VOICE_PORT/v1" ] && [ "$(openclaw config get messages.tts.auto 2>/dev/null | tr -d '"[:space:]')" = "$VOICE_REPLIES" ]   && ok "OpenClaw's spoken replies use the local voice server (when: $VOICE_REPLIES)"   || warn "OpenClaw's voice setting didn't stick; run bin/gateway-up.sh and read its warnings"
 echo
-echo "Done. Console → Voice to add your own voice, or: bin/voice.sh say \"Hello there\""
+echo "Done. Console → Voice: add your own voice, or press the microphone and talk to the agent. From a shell: bin/voice.sh say \"Hello there\""

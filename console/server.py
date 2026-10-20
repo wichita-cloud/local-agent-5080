@@ -18,7 +18,7 @@ Design rules (each one is deliberate):
     open in your browser cannot drive these buttons.
   * Character files are written with a timestamped backup first, and only names on an allowlist can be written.
 """
-import json, os, re, shlex, socket, subprocess, threading, time, urllib.request
+import base64, json, os, re, shlex, socket, subprocess, threading, time, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -644,11 +644,20 @@ def voice_health(c):
         return {"status": "down"}
 
 
+def stt_status(c):
+    code, body = http_get(f"http://127.0.0.1:{c.get('STT_PORT', 8890)}/health", timeout=3)
+    try:
+        return json.loads(body).get("status", "down") if code == 200 else "down"
+    except ValueError:
+        return "down"
+
+
 def voice_info():
     c = cfg()
     vdir = c.get("VOICE_DIR", "")
     out = {"installed": voice_installed(c), "engine": c.get("VOICE_ENGINE"), "active": c.get("VOICE_NAME", "default"),
-           "replies": c.get("VOICE_REPLIES"), "dir": vdir, "health": voice_health(c) if voice_installed(c) else {},
+           "replies": c.get("VOICE_REPLIES"), "stt": os.path.isfile(os.path.join(c.get("VOICE_VENV", ""), ".stt-installed")),
+           "stt_health": stt_status(c) if voice_installed(c) else "", "dir": vdir, "health": voice_health(c) if voice_installed(c) else {},
            "voices": [{"name": "default", "builtin": True}]}
     try:
         for n in sorted(os.listdir(vdir)):
@@ -713,6 +722,33 @@ def voice_speak(d):
         raise RuntimeError(e.read().decode(errors="replace")[:300])
     except OSError as e:
         raise RuntimeError(f"voice server not reachable ({e}); is it installed and running?")
+
+
+def voice_listen(d):
+    """Recording (base64, from the browser's microphone) -> words, from the local speech-to-text server."""
+    c = cfg()
+    if not os.path.isfile(os.path.join(c.get("VOICE_VENV", ""), ".stt-installed")):
+        raise RuntimeError("speech-to-text isn't installed: re-run the voice install (Voice tab → Install voice)")
+    try:
+        audio = base64.b64decode(d.get("data") or "", validate=True)
+    except ValueError:
+        raise ValueError("couldn't read the recording")
+    if len(audio) < 1000:
+        raise ValueError("that recording is empty; hold the microphone button while you talk")
+    ext = os.path.splitext(str(d.get("filename") or ""))[1]
+    req = urllib.request.Request(f"http://127.0.0.1:{c.get('STT_PORT', 8890)}/v1/audio/transcriptions", data=audio,
+                                 headers={"Content-Type": "application/octet-stream", "X-Filename": "speech" + (ext if re.fullmatch(r"\.[A-Za-z0-9]{1,5}", ext) else ".webm")})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        try:
+            msg = json.loads(e.read()).get("error")
+        except ValueError:
+            msg = None
+        raise RuntimeError(msg or f"speech-to-text answered HTTP {e.code}")
+    except OSError as e:
+        raise RuntimeError(f"speech-to-text not reachable ({e}); the watchdog restarts it within a minute")
 
 
 # ── jobs: one long-running script at a time, output streamed to the page ────────────────────────────────────────
@@ -844,7 +880,7 @@ class H(BaseHTTPRequestHandler):
         try:
             n = int(self.headers.get("Content-Length") or 0)
             path = self.path.split("?")[0]
-            if n > (36_000_000 if path == "/api/voice/add" else 2_000_000):   # a voice recording arrives as base64
+            if n > (36_000_000 if path in ("/api/voice/add", "/api/voice/listen") else 2_000_000):   # a voice recording arrives as base64
                 return self._send(413, {"error": "too large"})
             d = json.loads(self.rfile.read(n) or b"{}")
             if path == "/api/job":
@@ -863,6 +899,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, voice_add(d))
             if path == "/api/voice/remove":
                 return self._send(200, {"log": voice_cmd("remove", _slug(d.get("name")))})
+            if path == "/api/voice/listen":
+                return self._send(200, voice_listen(d))
             if path == "/api/voice/speak":
                 return self._send(200, ctype="audio/mpeg", body=voice_speak(d))
             if path == "/api/voice/talk":             # one agent turn in its own "voice" conversation, reply as text

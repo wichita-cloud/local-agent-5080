@@ -13,7 +13,7 @@ Everything is bash and small Python programs. There is no build step, and every 
 |---|---|
 | `config/stack.env.example` | **Every tunable**: ports, paths, container name, floors. Copied to `config/stack.env` (git-ignored). |
 | `config/secrets.env.example` | Optional API keys. Copied to `config/secrets.env` (git-ignored, mode 600). |
-| `bin/voice-install.sh`, `bin/voice.sh`, `services/voice_server.py` | Optional voice add-on (docs/VOICE.md): its own venv, CPU only on `VOICE_CPUSET`, OpenAI-style `/v1/audio/speech` on `VOICE_PORT`. Everything else checks `$VOICE_VENV/.installed` (written last by the installer) and skips voice when it isn't installed. |
+| `bin/voice-install.sh`, `bin/voice.sh`, `services/voice_server.py`, `services/stt_server.py`, `bin/stt-cli.sh` | Optional voice add-on (docs/VOICE.md): its own venv, CPU only on `VOICE_CPUSET`. Speech out: OpenAI-style `/v1/audio/speech` on `VOICE_PORT`. Speech in: faster-whisper `/v1/audio/transcriptions` on `STT_PORT` (console microphone; `gateway-up.sh` points OpenClaw's `tools.media.audio` at `stt-cli.sh` for voice notes). Everything else checks `$VOICE_VENV/.installed` (voice) and `.stt-installed` (speech-to-text), written last by the installer, and skips them when absent. |
 | `config/tuning/<profile>.env` | The user's per-model adjustments (sampling, context, thinking), layered over `models/<profile>.env` by `load_profile`. Written only by `bin/model.sh tune`. Git-ignored. |
 | `models/*.env` | One file per model profile: file name, context, batch sizes, sampling, expected speed; optionally a vision projector (`MMPROJ_*`), an MTP source (`BASE_FILE`, `MTP_DONOR_URL`) and a pinned llama.cpp build (`LLAMA_IMAGE_PROFILE`). **The model is named here and nowhere else.** |
 | `bin/lib.sh` | Shared helpers sourced by every script: loads config, logging, `need_*` checks, port-owner lookup. |
@@ -81,7 +81,8 @@ Breaking any of these causes a failure that is easy to miss. The reasoning is in
     only running scripts should appear, never a service.
 15. **The voice never uses the GPU, and never a cloud service.** `voice_server.py` hides CUDA; `gateway-up.sh` always points
     OpenClaw's `messages.tts` at the local server (OpenClaw's default provider sends text to an online service). Keep
-    Chatterbox's watermark on, and keep the consent step in `voice.sh add`.
+    Chatterbox's watermark on, and keep the consent step in `voice.sh add`. Listening is local too: `stt_server.py` hides CUDA,
+    binds loopback, and never logs what was said.
 
 ## How to test a change
 ```bash

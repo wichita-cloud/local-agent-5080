@@ -64,7 +64,7 @@ measured on that one.
 | Sees images | the 64k and MTP profiles read photos and screenshots you send; the image encoder runs on the CPU, so it costs no GPU memory |
 | Web console | `http://localhost:18800`: is it running optimally, switch or download models, edit the agent's character |
 | Switching models | one click in the console, or `bin/model.sh use <profile>`; nothing else needs editing |
-| Voice (optional add-on) | the agent speaks in a voice you choose or clone from a 10-30 s recording; local, on spare CPU cores ([docs/VOICE.md](docs/VOICE.md)) |
+| Voice (optional add-on) | talk to the agent with the microphone (local speech-to-text) and hear it answer in a voice you choose or clone from a 10-30 s recording; all local, on spare CPU cores ([docs/VOICE.md](docs/VOICE.md)) |
 | Fine-tuning (optional) | hidden under **Advanced** on each model: temperature and other sampling settings, context length, thinking. Each model keeps its own |
 | Your own character | the agent's name, personality and rules are plain Markdown files you edit in the console. It ships neutral |
 | Memory | Local BGE-M3 embeddings and a reranker on the CPU; relevant memories are added to each turn automatically |
@@ -85,8 +85,8 @@ Only one, and it's optional. There are no cloud model keys and no subscription.
 | GitHub | no | cloning is anonymous |
 | Docker Desktop | no (sign-in optional) | free for personal use and small businesses (under 250 employees and under $10M revenue); larger companies need a paid plan |
 | NVIDIA driver, WSL, OpenClaw | no | |
-| Voice add-on | no | runs locally; weights download from Hugging Face without an account |
-| Telegram | optional | only if you want to chat with the agent from your phone (and hear voice notes): a free bot token from @BotFather. See [docs/VOICE.md](docs/VOICE.md) |
+| Voice add-on (speaking and listening) | no | runs locally; weights download from Hugging Face without an account |
+| Telegram | optional | only if you want to chat with the agent from your phone (send and hear voice notes): a free bot token from @BotFather. See [docs/VOICE.md](docs/VOICE.md) |
 
 **To turn on web search:** sign up at [brave.com/search/api](https://brave.com/search/api/), choose the **Search** plan,
 create an API key, paste it after `BRAVE_API_KEY=` in `config/secrets.env`, then run `bin/gateway-up.sh`.

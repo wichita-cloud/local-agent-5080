@@ -65,6 +65,14 @@ if [ -f "$VOICE_VENV/.installed" ]; then   # optional add-on: only checked when 
     *) fail "voice (:$VOICE_PORT) ${vs:-down}"; hint "tail $STATE_DIR/voice-server.log; bin/services-up.sh restarts it" ;;
   esac
 fi
+if [ -f "$VOICE_VENV/.stt-installed" ]; then   # speech-to-text half of the voice add-on
+  ss=$(curl -s -m 5 "http://127.0.0.1:$STT_PORT/health" 2>/dev/null | grep -oE '"status": *"[a-z]+"' | grep -oE '[a-z]+"$' | tr -d '"')
+  case "$ss" in
+    ok) pass "speech-to-text (:$STT_PORT, model $STT_MODEL)" ;;
+    loading) warn "speech-to-text (:$STT_PORT) still loading its model; check again in a minute. Not counted" ;;
+    *) fail "speech-to-text (:$STT_PORT) ${ss:-down}"; hint "tail $STATE_DIR/stt-server.log; bin/services-up.sh restarts it" ;;
+  esac
+fi
 # end-to-end through the same chain the agent uses
 if curl -s -m 90 "http://127.0.0.1:$SHIM_PORT/v1/chat/completions" -H 'Content-Type: application/json' \
      -d "{\"model\":\"$MODEL_ALIAS\",\"messages\":[{\"role\":\"user\",\"content\":\"ok\"}],\"max_tokens\":1}" 2>/dev/null | grep -q '"choices"'; then

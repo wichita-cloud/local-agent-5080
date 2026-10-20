@@ -45,5 +45,6 @@ check rag-proxy      "$RAG_PORT"     "http://127.0.0.1:$RAG_PORT/health"     "$R
 check ready-proxy    "$SHIM_PORT"    -                                        "$REPO/bin/services-up.sh"
 check console        "$CONSOLE_PORT" "http://127.0.0.1:$CONSOLE_PORT/"        "$REPO/bin/console-up.sh"
 [ -f "$VOICE_VENV/.installed" ] && check voice "$VOICE_PORT" "http://127.0.0.1:$VOICE_PORT/health" "$REPO/bin/services-up.sh"
+[ -f "$VOICE_VENV/.stt-installed" ] && check stt "$STT_PORT" "http://127.0.0.1:$STT_PORT/health" "$REPO/bin/services-up.sh"
 check gateway        "$GATEWAY_PORT" "http://127.0.0.1:$GATEWAY_PORT/health"  "$REPO/bin/gateway-up.sh"
 exit 0

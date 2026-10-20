@@ -50,6 +50,12 @@ else
   oc messages.tts "{\"auto\":\"off\",\"provider\":\"openai\",\"openai\":{\"baseUrl\":\"http://127.0.0.1:$VOICE_PORT/v1\",\"apiKey\":\"local-no-key\"}}"
 fi
 
+# Voice notes you SEND to the agent (Telegram etc.) are transcribed by the local speech-to-text server before the model
+# sees them (bin/stt-cli.sh). Without it the agent only gets "<media:audio>" and can't understand a voice note.
+if [ -f "$VOICE_VENV/.stt-installed" ]; then
+  oc tools.media.audio "{\"enabled\":true,\"maxBytes\":20971520,\"timeoutSeconds\":60,\"models\":[{\"type\":\"cli\",\"command\":\"$REPO/bin/stt-cli.sh\",\"args\":[\"{{MediaPath}}\"],\"timeoutSeconds\":60}]}"
+fi
+
 # Pin the dashboard token (generate once, save to secrets.env)
 if [ -z "${GATEWAY_TOKEN:-}" ]; then
   GATEWAY_TOKEN=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')

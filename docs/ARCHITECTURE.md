@@ -14,6 +14,7 @@
       ├─ memory_service.py       :5766   ChromaDB + BGE-M3 + reranker (CPU)
       ├─ console/server.py       :18800  web console (system python3, stdlib only; runs the bin/ scripts)
       ├─ voice_server.py         :8880   optional: text-to-speech + voice cloning (Chatterbox, CPU cores 8-15, own venv)
+      ├─ stt_server.py           :8890   optional: speech-to-text (faster-whisper, same venv and cores; mic button + voice notes in)
       └─ cron: guards/services-watchdog.sh (1 min), guards/decode-floor.sh (5 min), memory_ingest (nightly)
 ```
 

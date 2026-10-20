@@ -96,6 +96,53 @@ details.adv{margin-top:8px}details.adv summary{font-size:13px;color:var(--mut)}
 .advrow:first-of-type{border-top:0}.advrow label{margin:0;font-size:13px;font-weight:600}
 .advrow input,.advrow select{padding:4px 7px}.advrow.changed label::after{content:" •";color:var(--warn)}
 @media (max-width:640px){.advrow{grid-template-columns:1fr 110px}.advrow .small{grid-column:1/-1}}
+/* voice tab: a conversation view first, settings behind "Advanced settings" */
+:root{--onacc:#fff}
+:root[data-theme="dark"]{--onacc:#111}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--onacc:#111}}
+.vhead{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.vhead-r{display:flex;gap:10px;align-items:center}
+.vmain{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:900px){.vmain{grid-template-columns:1fr}}
+.vchat{padding:0;overflow:hidden;margin-bottom:0}
+.vchat-h{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+.vchat-h h3{margin:0;font-size:16px}
+.vlog{min-height:360px;max-height:58vh;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.vempty{margin:auto;max-width:380px;text-align:center;color:var(--mut);font-size:14px}
+.vmsg{max-width:86%;padding:9px 13px;border-radius:14px;font-size:15px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+.vmsg.you{align-self:flex-end;background:var(--acc);color:var(--onacc);border-bottom-right-radius:4px}
+.vmsg.agent{align-self:flex-start;background:var(--soft);border-bottom-left-radius:4px}
+.vmsg.err{background:var(--badbg);color:var(--bad)}
+.vmeta{font-size:12px;color:var(--mut);margin:-6px 6px 2px}
+.vmeta.you{align-self:flex-end;text-align:right}
+.vdots i{display:inline-block;width:7px;height:7px;margin:0 2px;border-radius:50%;background:var(--mut);animation:vb 1.2s infinite ease-in-out}
+.vdots i:nth-child(2){animation-delay:.2s}.vdots i:nth-child(3){animation-delay:.4s}
+@keyframes vb{0%,80%,100%{opacity:.25}40%{opacity:1}}
+.vcomposer{display:flex;gap:10px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}
+.vmic{width:52px;height:52px;border-radius:50%;border:0;background:var(--acc);color:var(--onacc);display:grid;place-items:center;cursor:pointer;flex-shrink:0}
+.vmic:hover{filter:brightness(1.08)}
+.vmic.rec{background:var(--bad);color:#fff;animation:vp 1.4s infinite}
+.vmic:disabled{opacity:.45;cursor:default;animation:none}
+@keyframes vp{0%{box-shadow:0 0 0 0 rgba(180,35,24,.45)}70%{box-shadow:0 0 0 14px rgba(180,35,24,0)}100%{box-shadow:0 0 0 0 rgba(180,35,24,0)}}
+.vmic:focus-visible,#vSend:focus-visible,#vStop:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.vinput{flex:1;position:relative;min-width:0}
+.vmeter{position:absolute;inset:0;display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--bad);border-radius:8px;padding:0 10px}
+.vmeter[hidden]{display:none}
+.vrec{color:var(--bad);font-size:12px}
+.vbar{flex:1;height:8px;background:var(--soft);border-radius:4px;overflow:hidden}
+.vbar i{display:block;height:100%;width:0;background:var(--bad);transition:width .08s linear}
+#vTimer{font-variant-numeric:tabular-nums;font-size:13px}
+.vfoot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:0 16px 12px}
+.vchk{display:flex;gap:6px;align-items:center;margin:0;color:var(--mut);font-size:13px}
+.vchk input{width:auto}
+.vtry{margin-bottom:0}
+.vadv{margin-top:16px}
+.vadv>summary{font-size:14px;padding:10px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;list-style:none;color:var(--fg);font-weight:600}
+.vadv>summary::-webkit-details-marker{display:none}
+.vadv>summary::before{content:"▸ ";color:var(--mut)}
+.vadv[open]>summary::before{content:"▾ "}
+.vadv[open]>summary{margin-bottom:16px}
+@media (prefers-reduced-motion:reduce){.vmic.rec,.vdots i{animation:none}.vbar i{transition:none}}
 </style>
 </head>
 <body>
@@ -257,13 +304,51 @@ details.adv{margin-top:8px}details.adv summary{font-size:13px;color:var(--mut)}
   </div>
 
   <div id="vInstalled" hidden>
-    <div class="card">
-      <h2>Voices</h2>
-      <p class="small mut" style="margin-top:-4px" id="vStatus"></p>
-      <div id="vList"></div>
+    <div class="vhead">
+      <div><h2 style="margin:0">Voice</h2><div class="small mut" id="vStatus"></div></div>
+      <div class="vhead-r"><span class="small mut">The agent's voice: <b id="vActive">default</b></span><button class="b" id="vChange">Change voice</button></div>
     </div>
 
-    <div class="grid2">
+    <div class="vmain">
+      <div class="card vchat">
+        <div class="vchat-h"><h3>Talk to your agent</h3><span id="vState" class="pill s-ok" role="status" aria-live="polite">Ready</span></div>
+        <div id="vLog" class="vlog" aria-label="Conversation">
+          <div class="vempty">Press the microphone and speak, or type below. The agent answers in writing and in its voice.
+            Listening and speaking both happen on this PC; nothing is uploaded.</div>
+        </div>
+        <div class="vcomposer">
+          <button id="vMic" class="vmic" aria-pressed="false" aria-label="Speak your message" title="Speak your message (press again to send)" hidden>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg>
+          </button>
+          <div class="vinput">
+            <input id="vMsg" placeholder="Type a message…" autocomplete="off" aria-label="Message to the agent">
+            <div id="vMeter" class="vmeter" hidden><span class="vrec">●</span><span class="vbar"><i></i></span><span id="vTimer">0:00</span><span class="small mut">Esc cancels</span></div>
+          </div>
+          <button class="b pri" id="vSend">Send</button>
+          <button class="b" id="vStop" hidden>Stop speaking</button>
+        </div>
+        <div class="vfoot small mut">
+          <label class="vchk" id="vAutoRow"><input type="checkbox" id="vAuto" checked> Send automatically when I stop talking</label>
+          <span id="vHint"></span>
+        </div>
+      </div>
+
+      <div class="card vtry">
+        <h3 style="margin:0 0 4px;font-size:16px">Hear the voice</h3>
+        <p class="small mut" style="margin:0 0 8px">Type anything and hear it in the agent's voice (no agent involved).</p>
+        <textarea id="vSay" rows="4" aria-label="Text to speak">Hello! This is how I'll sound when I read my replies to you.</textarea>
+        <div class="btns"><button class="b pri" id="vSpeak">Speak</button></div>
+      </div>
+    </div>
+
+    <details id="vAdv" class="vadv">
+      <summary>Advanced settings: change or add a voice, recording tips</summary>
+      <div class="card" id="vVoicesCard">
+        <h2>Voices</h2>
+        <p class="small mut" style="margin-top:-4px">Pick which voice the agent speaks with, or preview one.</p>
+        <div id="vList"></div>
+      </div>
+
       <div class="card">
         <h2>Add a voice</h2>
         <p class="small mut" style="margin-top:-4px">A clean 10–30 second recording of one person speaking naturally. It's cleaned up
@@ -279,36 +364,24 @@ details.adv{margin-top:8px}details.adv summary{font-size:13px;color:var(--mut)}
       </div>
 
       <div class="card">
-        <h2>Try it</h2>
-        <label for="vSay">Text</label>
-        <textarea id="vSay" rows="3">Hello! This is how I'll sound when I read my replies to you.</textarea>
-        <div class="btns"><button class="b" id="vSpeak">Speak</button></div>
-        <h3>Talk to your agent</h3>
-        <p class="small mut" style="margin:0 0 6px">Type a message; the reply is shown and read aloud in the agent's voice. This uses its own
-          conversation, separate from the dashboard.</p>
-        <div style="display:flex;gap:8px"><input id="vMsg" placeholder="Ask me anything"><button class="b pri" id="vSend">Send</button></div>
-        <div id="vReply" class="note" hidden></div>
-        <audio id="vAudio" controls style="width:100%;margin-top:10px" hidden></audio>
+        <details><summary>Recording a good clip (with Audacity, free)</summary>
+          <ol class="small" style="line-height:1.6">
+            <li><b>Set up.</b> In Audacity: <i>Audio Setup → Recording Device</i> = your microphone, and <i>Audio Setup → Recording Channels</i> =
+              1 (Mono). Sit 15–20 cm from the mic, in a quiet room with soft furnishings (less echo).</li>
+            <li><b>Record.</b> Press Record, stay silent for 3 seconds (that's "room tone"), then read for 20–30 seconds in your normal
+              speaking voice: varied sentences, not a list. Keep the level meter peaking around −12 to −6 dB, never in the red.</li>
+            <li><b>Remove background noise.</b> Select the 3 silent seconds → <i>Effect → Noise Removal and Repair → Noise Reduction →
+              Get Noise Profile</i>. Then select all (Ctrl+A) → the same effect again → OK (the default 12 dB is fine; more sounds robotic).</li>
+            <li><b>Cut</b> the silent start, coughs and mistakes: select them and press Delete.</li>
+            <li><b>Even out the level.</b> <i>Effect → Volume and Compression → Normalize</i>, peak −1 dB.</li>
+            <li><b>Export.</b> <i>File → Export Audio</i> → WAV, 16-bit, mono. Then add it above.</li>
+          </ol>
+          <p class="small mut">Avoid music or other voices in the background, echoey rooms, phone-call recordings, and heavy effects: the clone
+            copies the recording's sound as well as the voice. Full guide: <span class="mono">docs/VOICE.md</span>.</p>
+        </details>
       </div>
-    </div>
-  </div>
-
-  <div class="card">
-    <details><summary>Recording a good clip (with Audacity, free)</summary>
-      <ol class="small" style="line-height:1.6">
-        <li><b>Set up.</b> In Audacity: <i>Audio Setup → Recording Device</i> = your microphone, and <i>Audio Setup → Recording Channels</i> =
-          1 (Mono). Sit 15–20 cm from the mic, in a quiet room with soft furnishings (less echo).</li>
-        <li><b>Record.</b> Press Record, stay silent for 3 seconds (that's "room tone"), then read for 20–30 seconds in your normal
-          speaking voice: varied sentences, not a list. Keep the level meter peaking around −12 to −6 dB, never in the red.</li>
-        <li><b>Remove background noise.</b> Select the 3 silent seconds → <i>Effect → Noise Removal and Repair → Noise Reduction →
-          Get Noise Profile</i>. Then select all (Ctrl+A) → the same effect again → OK (the default 12 dB is fine; more sounds robotic).</li>
-        <li><b>Cut</b> the silent start, coughs and mistakes: select them and press Delete.</li>
-        <li><b>Even out the level.</b> <i>Effect → Volume and Compression → Normalize</i>, peak −1 dB.</li>
-        <li><b>Export.</b> <i>File → Export Audio</i> → WAV, 16-bit, mono. Then add it above.</li>
-      </ol>
-      <p class="small mut">Avoid music or other voices in the background, echoey rooms, phone-call recordings, and heavy effects: the clone
-        copies the recording's sound as well as the voice. Full guide: <span class="mono">docs/VOICE.md</span>.</p>
     </details>
+    <audio id="vAudio" controls style="width:100%;margin-top:10px" hidden></audio>
   </div>
 </section>
 </main>
@@ -611,9 +684,14 @@ async function loadVoice() {
   $("#vNotInstalled").hidden = v.installed; $("#vInstalled").hidden = !v.installed;
   if (!v.installed) return;
   const st = (v.health || {}).status;
-  $("#vStatus").textContent = st === "ok" ? `Running (${v.engine}). The agent speaks as "${v.active}".`
+  $("#vActive").textContent = v.active;
+  $("#vStatus").textContent = st === "ok" ? `Speaking: ready (${v.engine}). Listening: ${v.stt ? (v.stt_health === "ok" ? "ready" : v.stt_health === "loading" ? "loading…" : "not running") : "not installed"}.`
     : st === "loading" ? "Loading the voice model (about 20 seconds)…" : `Voice server is ${st || "down"}. The watchdog restarts it within a minute; see voice-server.log.`;
-  if (st === "loading") setTimeout(() => { if (tab === "voice") loadVoice(); }, 5000);
+  if (st === "loading" || v.stt_health === "loading") setTimeout(() => { if (tab === "voice") loadVoice(); }, 4000);
+  const mic = $("#vMic"), sttOk = v.stt && v.stt_health === "ok";
+  mic.hidden = !v.stt; if (!(rec && rec.state === "recording") && !busy) mic.disabled = !sttOk;
+  $("#vAutoRow").hidden = !v.stt;
+  $("#vHint").textContent = !v.stt ? "Speaking to the agent needs speech-to-text: re-run the voice install (Advanced settings or bin/voice-install.sh)." : "";
   $("#vList").innerHTML = v.voices.map(x => `<div class="model"><div><div class="name">${esc(x.name)}${x.name === v.active ? ' <span class="tag on">the agent&#39;s voice</span>' : ""}</div>
       <div class="small mut">${x.builtin ? "built in" : `${esc(x.seconds)} s clip · added ${esc(x.created || "")}`}</div></div>
       <div class="btns" style="margin-top:0;flex-shrink:0">
@@ -622,31 +700,154 @@ async function loadVoice() {
         ${x.name === v.active ? "" : `<button class="b pri needsidle" data-job="voice-use" data-voice="${esc(x.name)}">Use for the agent</button>`}
         ${x.builtin || x.name === v.active ? "" : `<button class="b" data-vdel="${esc(x.name)}">Delete</button>`}</div></div>`).join("");
 }
-async function playSpeech(text, voice) {
+$("#vChange").onclick = () => { $("#vAdv").open = true; $("#vVoicesCard").scrollIntoView({behavior: "smooth", block: "start"}); };
+
+// Speech is made a sentence at a time and each piece plays as soon as it's ready, while the next is being made.
+// Speaking a whole reply first meant ~28 s of silence before a 38 s answer started (the voice runs at ~0.75x real time
+// on the CPU); now the first sentence is heard after ~2-3 s. Pieces are made in order, one after another, because
+// the voice server does one at a time anyway.
+let speechRun = 0;
+function speechChunks(text) {
+  const clean = String(text || "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/[*_`#>|]+/g, " ").replace(/\s+/g, " ").trim();
+  const out = [];
+  for (let s of clean.split(/(?<=[.!?…]["')\]]?)\s+/)) {   // end of sentence = punctuation THEN a space ("3.5 GB" stays whole)
+    s = s.trim();
+    // pieces of similar length keep the voice ahead of playback (it makes speech at ~0.75x real time); one piece much
+    // longer than the one playing before it leaves a gap, so long sentences are split at a comma, else a space
+    while (s.length > 130) {
+      let k = s.lastIndexOf(", ", 130); if (k < 50) k = s.lastIndexOf(" ", 130); if (k < 50) k = 130;
+      out.push(s.slice(0, k + 1).trim()); s = s.slice(k + 1).trim();
+    }
+    if (s) out.push(s);
+  }
+  const merged = [];                               // "Sure!" alone sounds clipped: join tiny pieces to the next one
+  for (const s of out) { if (merged.length && merged[merged.length - 1].length < 25) merged[merged.length - 1] += " " + s; else merged.push(s); }
+  return merged;
+}
+async function speechUrl(text, voice) {
   const r = await fetch("/api/voice/speak", {method: "POST", headers: {"Content-Type": "application/json", "X-Console": "1"},
     body: JSON.stringify({text, voice})});
   if (!r.ok) { let m = "speech failed"; try { m = (await r.json()).error; } catch (e) {} throw new Error(m); }
-  const a = $("#vAudio"); a.src = URL.createObjectURL(await r.blob()); a.hidden = false; a.play().catch(() => {});
+  return URL.createObjectURL(await r.blob());
 }
+async function playSpeech(text, voice) {
+  const run = ++speechRun, a = $("#vAudio"), chunks = speechChunks(text);
+  if (!chunks.length) throw new Error("nothing to say");
+  let chain = Promise.resolve(), ready = [];
+  for (const [i, c] of chunks.entries()) {
+    chain = chain.then(() => (run === speechRun ? speechUrl(c, voice) : null));
+    ready.push(i === 0 ? chain : chain.catch(() => null));   // a failure after the first piece just ends the reply early
+    chain = chain.catch(() => null);
+  }
+  for (const p of ready) {
+    const url = await p;
+    if (!url || run !== speechRun) return;
+    a.src = url;
+    try { await a.play(); } catch (e) { a.hidden = false; toast("Your browser blocked autoplay: press play on the audio bar"); return; }
+    // next piece on "ended"; a pause by the listener (or a newer reply) stops the rest
+    const how = await new Promise(res => { a.onended = () => res("next"); a.onerror = () => res("next"); a.onpause = () => res(a.ended ? "next" : "stop"); });
+    URL.revokeObjectURL(url);
+    if (how === "stop" || run !== speechRun) return;
+  }
+}
+function stopSpeech() { speechRun++; const a = $("#vAudio"); a.pause(); }
 document.addEventListener("click", async e => {
   const p = e.target.closest("[data-vprev]"), c = e.target.closest("[data-vclip]"), d = e.target.closest("[data-vdel]");
   if (p) { p.disabled = true; try { await playSpeech($("#vSay").value || "Hello there.", p.dataset.vprev); } catch (er) { toast(er.message); } p.disabled = false; }
-  if (c) { const a = $("#vAudio"); a.src = "/api/voice/clip?name=" + encodeURIComponent(c.dataset.vclip); a.hidden = false; a.play().catch(() => {}); }
+  if (c) { const a = $("#vAudio"); stopSpeech(); a.src = "/api/voice/clip?name=" + encodeURIComponent(c.dataset.vclip); a.hidden = false; a.play().catch(() => {}); }
   if (d && confirm(`Delete the voice "${d.dataset.vdel}"? Its recording is removed.`)) {
     try { await api("/api/voice/remove", {name: d.dataset.vdel}); toast("Deleted"); loadVoice(); } catch (er) { toast(er.message); } }
 });
 $("#vSpeak").onclick = async () => { const b = $("#vSpeak"); b.disabled = true; b.textContent = "Speaking…";
   try { await playSpeech($("#vSay").value, lastVoice && lastVoice.active); } catch (er) { toast(er.message); } b.disabled = false; b.textContent = "Speak"; };
-$("#vSend").onclick = async () => {
-  const msg = $("#vMsg").value.trim(); if (!msg) return; const b = $("#vSend"); b.disabled = true; b.textContent = "Thinking…";
-  const box = $("#vReply"); box.hidden = false; box.textContent = "…";
+
+/* the conversation: you speak or type, the agent answers in writing and aloud */
+let busy = false, turn = 0;
+const sec = ms => (ms / 1000).toFixed(1) + " s";
+function vState(kind, text) { const p = $("#vState"); p.className = "pill " + ({ready: "s-ok", listen: "s-fail", busy: "s-wait"}[kind] || "s-ok"); p.textContent = text; }
+function vBubble(cls, text) {
+  const log = $("#vLog"); const e = log.querySelector(".vempty"); if (e) e.remove();
+  const d = document.createElement("div"); d.className = "vmsg " + cls; if (text != null) d.textContent = text;
+  log.appendChild(d); log.scrollTop = log.scrollHeight; return d;
+}
+function vMeta(cls, text) { const d = document.createElement("div"); d.className = "vmeta " + cls; d.textContent = text; $("#vLog").appendChild(d); $("#vLog").scrollTop = $("#vLog").scrollHeight; return d; }
+function setBusy(b) { busy = b; $("#vSend").disabled = b; $("#vMsg").disabled = b; if (lastVoice) $("#vMic").disabled = b || !(lastVoice.stt && lastVoice.stt_health === "ok"); }
+// t0 = when the question was finished (end of the recording, or the Send press); the line under the reply shows where the time went
+async function sendMessage(msg, t0, heardSec) {
+  const my = ++turn; stopSpeech(); setBusy(true); $("#vMsg").value = "";
+  vBubble("you", msg); if (heardSec) vMeta("you", `heard in ${sec(heardSec)}`);
+  const reply = vBubble("agent"); reply.innerHTML = '<span class="vdots" aria-label="The agent is thinking"><i></i><i></i><i></i></span>';
+  vState("busy", "Thinking…");
   try {
-    const r = await api("/api/voice/talk", {text: msg}); box.textContent = r.reply || "(no reply)"; $("#vMsg").value = "";
-    if (r.reply) { b.textContent = "Speaking…"; await playSpeech(r.reply.slice(0, 2000)); }
-  } catch (er) { box.textContent = er.message; }
-  b.disabled = false; b.textContent = "Send";
-};
-$("#vMsg").addEventListener("keydown", e => { if (e.key === "Enter") $("#vSend").click(); });
+    const tAsk = performance.now();
+    const r = await api("/api/voice/talk", {text: msg}); const tText = performance.now() - tAsk;
+    reply.textContent = r.reply || "(no reply)";
+    $("#vLog").scrollTop = $("#vLog").scrollHeight;
+    if (r.reply) {
+      vState("busy", "Speaking…"); $("#vStop").hidden = false;
+      const a = $("#vAudio"), tPlay = performance.now();
+      const meta = vMeta("", "");
+      a.addEventListener("playing", () => { meta.textContent = `written in ${sec(tText)} · first sound ${sec(performance.now() - tPlay)} later · ${sec(performance.now() - t0)} after you finished`; }, {once: true});
+      setBusy(false);                                   // you can type, or talk over it, while it speaks
+      await playSpeech(r.reply.slice(0, 2000));
+    }
+  } catch (er) { reply.className = "vmsg err"; reply.textContent = er.message; }
+  if (my !== turn) return;                          // a newer message took over while this one was speaking
+  setBusy(false); $("#vStop").hidden = true; vState("ready", "Ready");
+}
+$("#vSend").onclick = () => { const msg = $("#vMsg").value.trim(); if (msg && !busy) sendMessage(msg, performance.now(), 0); };
+$("#vMsg").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) $("#vSend").click(); });
+$("#vStop").onclick = () => { stopSpeech(); $("#vStop").hidden = true; vState("ready", "Ready"); };
+try { $("#vAuto").checked = localStorage.getItem("vAuto") !== "0"; } catch (e) {}
+$("#vAuto").onchange = () => { try { localStorage.setItem("vAuto", $("#vAuto").checked ? "1" : "0"); } catch (e) {} };
+
+// Speaking to the agent: record in the browser, the console sends it to the local speech-to-text server. A browser only
+// allows the microphone on localhost or https, which is how the console is normally opened.
+let rec = null, recChunks = [], recStream = null, recCtx = null, recTick = null, recCancel = false, recStart = 0;
+function micIdle() {
+  const m = $("#vMic"); m.classList.remove("rec"); m.setAttribute("aria-pressed", "false"); m.setAttribute("aria-label", "Speak your message");
+  $("#vMeter").hidden = true; clearInterval(recTick); if (recCtx) { recCtx.close().catch(() => {}); recCtx = null; }
+  $("#vMsg").hidden = false;
+}
+async function micStart() {
+  if (!navigator.mediaDevices || !window.MediaRecorder) return toast("This browser can't record; open the console at http://localhost:" + location.port);
+  try { recStream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}}); }
+  catch (e) { return toast("The microphone is blocked: allow it for this page (" + e.name + ")"); }
+  stopSpeech(); $("#vStop").hidden = true;     // talking over the agent stops it
+  const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "";
+  rec = new MediaRecorder(recStream, mime ? {mimeType: mime} : undefined); recChunks = []; recCancel = false;
+  rec.ondataavailable = e => { if (e.data && e.data.size) recChunks.push(e.data); };
+  rec.onstop = onRecStop;
+  rec.start(); recStart = performance.now();
+  const m = $("#vMic"); m.classList.add("rec"); m.setAttribute("aria-pressed", "true"); m.setAttribute("aria-label", "Stop and send");
+  $("#vMeter").hidden = false; vState("listen", "Listening…");
+  try {                                                // live level bar: people need to see they are being heard
+    recCtx = new (window.AudioContext || window.webkitAudioContext)(); const an = recCtx.createAnalyser(); an.fftSize = 512;
+    recCtx.createMediaStreamSource(recStream).connect(an); const buf = new Uint8Array(an.fftSize);
+    recTick = setInterval(() => {
+      an.getByteTimeDomainData(buf); let peak = 0; for (const x of buf) peak = Math.max(peak, Math.abs(x - 128));
+      $("#vMeter .vbar i").style.width = Math.min(100, peak / 64 * 100) + "%";
+      const s = Math.floor((performance.now() - recStart) / 1000); $("#vTimer").textContent = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+      if (s >= 90) rec.state === "recording" && rec.stop();                // never left running by accident
+    }, 100);
+  } catch (e) { $("#vTimer").textContent = "recording"; }
+}
+async function onRecStop() {
+  recStream.getTracks().forEach(t => t.stop()); micIdle();
+  if (recCancel) { vState("ready", "Ready"); return; }
+  const t0 = performance.now(), blob = new Blob(recChunks, {type: rec.mimeType || "audio/webm"});
+  vState("busy", "Listening to the recording…"); setBusy(true);
+  try {
+    const data = await new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.onerror = bad; r.readAsDataURL(blob); });
+    const r = await api("/api/voice/listen", {data, filename: "speech." + (blob.type.includes("ogg") ? "ogg" : "webm")});
+    if (!r.text) { setBusy(false); vState("ready", "Ready"); return toast("I didn't hear anything in that recording. Try again, a little closer to the microphone."); }
+    if ($("#vAuto").checked) { setBusy(false); await sendMessage(r.text, t0, performance.now() - t0); }
+    else { setBusy(false); $("#vMsg").value = r.text; $("#vMsg").focus(); vState("ready", "Check the words, then Send"); }   // edit mistakes before sending
+  } catch (er) { setBusy(false); vState("ready", "Ready"); toast(er.message); }
+}
+$("#vMic").onclick = () => { if (rec && rec.state === "recording") rec.stop(); else if (!busy) micStart(); };
+document.addEventListener("keydown", e => { if (e.key === "Escape" && rec && rec.state === "recording") { recCancel = true; rec.stop(); } });
+
 $("#vAdd").onclick = async () => {
   const name = $("#vName").value.trim().toLowerCase(), f = $("#vFile").files[0];
   if (!name || !f) return toast("Give the voice a name and choose a recording");

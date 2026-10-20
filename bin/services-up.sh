@@ -58,5 +58,15 @@ if [ -f "$VOICE_VENV/.installed" ]; then
     for _ in $(seq 1 15); do port_listening "$VOICE_PORT" && break; sleep 1; done
     port_listening "$VOICE_PORT" && ok "voice listening (model loads in the background)" || { warn "voice did not start (see $STATE_DIR/voice-server.log)"; rc=1; }
   fi
+  # speech-to-text (you talking to the agent), same venv; written last by voice-install.sh once its model is cached
+  if [ -f "$VOICE_VENV/.stt-installed" ]; then
+    if port_listening "$STT_PORT"; then ok "speech-to-text already listening on :$STT_PORT"
+    else
+      log "starting speech-to-text on :$STT_PORT (model $STT_MODEL, cores $VOICE_CPUSET)"
+      STT_THREADS=$(( $(echo "$VOICE_CPUSET" | awk -F- '{print ($2==""?1:$2-$1+1)}') ))         setsid nohup taskset -c "$VOICE_CPUSET" "$VOICE_VENV/bin/python3" "$REPO/services/stt_server.py"         >>"$STATE_DIR/stt-server.stdout" 2>&1 < /dev/null 7>&- 8>&- 9>&- &
+      for _ in $(seq 1 15); do port_listening "$STT_PORT" && break; sleep 1; done
+      port_listening "$STT_PORT" && ok "speech-to-text listening (model loads in the background)" || { warn "speech-to-text did not start (see $STATE_DIR/stt-server.log)"; rc=1; }
+    fi
+  fi
 fi
 exit $rc
