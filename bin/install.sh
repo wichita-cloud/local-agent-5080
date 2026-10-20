@@ -8,12 +8,14 @@
 #   5. OpenClaw patches (verified by marker count)
 #   6. default character files (only where none exist yet)
 #   7. guard cron entries
+#   8. security profile: asks how much of your PC the agent may touch (Protected sandbox is recommended)
+#   9. overnight research (optional, VERY BETA): asks whether to switch it on (default: no)
 # Docker Desktop, the NVIDIA driver and .wslconfig are Windows-side; see README step 0.
 set -u
 . "$(dirname "$0")/lib.sh"
 chmod +x "$REPO"/bin/*.sh "$REPO"/guards/*.sh "$REPO"/patches/*/apply.sh 2>/dev/null
 
-log "1/7 apt packages"
+log "1/9 apt packages"
 need=""
 for p in curl git python3-venv python3-pip cron iproute2 ca-certificates; do dpkg -s "$p" >/dev/null 2>&1 || need="$need $p"; done
 if [ -n "$need" ]; then sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $need || die "apt install failed"; fi
@@ -25,7 +27,7 @@ if ! id -nG | tr ' ' '\n' | grep -qx docker; then
   sudo groupadd -f docker && sudo usermod -aG docker "$USER" && warn "added $USER to the docker group: close and reopen Ubuntu before bin/up.sh"
 fi
 
-log "2/7 cron on boot"
+log "2/9 cron on boot"
 if ! grep -q 'service cron start' /etc/wsl.conf 2>/dev/null; then
   if grep -q '^\[boot\]' /etc/wsl.conf 2>/dev/null; then
     # an existing [boot] section (e.g. "systemd=false"): add the line under it, unless it already has a command
@@ -40,7 +42,7 @@ if ! grep -q 'service cron start' /etc/wsl.conf 2>/dev/null; then
 else ok "cron already starts on boot"; fi
 pgrep -x cron >/dev/null || sudo service cron start >/dev/null
 
-log "3/7 Node + OpenClaw $OPENCLAW_VERSION"
+log "3/9 Node + OpenClaw $OPENCLAW_VERSION"
 # WSL appends the Windows PATH, which can include Windows' own node/npm (C:\Program Files\nodejs). The nvm installer
 # and npm would then call the WINDOWS npm ("ENOENT ... AppData\Roaming\npm"). Hide /mnt/c paths while setting up Node.
 PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '^/mnt/' | paste -sd: -); export PATH
@@ -55,7 +57,7 @@ if [ "$have" != "$OPENCLAW_VERSION" ]; then
 fi
 ok "openclaw $(openclaw --version 2>/dev/null | head -1)"
 
-log "4/7 Python venv (services)"
+log "4/9 Python venv (services)"
 if [ ! -x "$VENV/bin/python3" ]; then python3 -m venv "$VENV" || die "venv creation failed"; fi
 if ! "$VENV/bin/python3" -c 'import chromadb, sentence_transformers, requests' 2>/dev/null; then
   "$VENV/bin/pip" install -q --upgrade pip
@@ -64,11 +66,11 @@ if ! "$VENV/bin/python3" -c 'import chromadb, sentence_transformers, requests' 2
 fi
 ok "venv ready ($VENV)"
 
-log "5/7 OpenClaw patches"
+log "5/9 OpenClaw patches"
 OPENCLAW_DIST="$(npm root -g)/openclaw/dist" OPENCLAW_WORKSPACE="$OPENCLAW_WORKSPACE" \
   "$REPO/patches/openclaw-$OPENCLAW_VERSION/apply.sh" || warn "some patches did not apply (see above). The agent works without them, but tool calls are less reliable"
 
-log "6/7 default character (only into an empty workspace)"
+log "6/9 default character (only into an empty workspace)"
 # Copies characters/default/* for any file that doesn't exist yet. Never overwrites: the workspace holds YOUR agent's
 # character and notes. Change the character later in the console's Character tab (or edit the files directly).
 mkdir -p "$OPENCLAW_WORKSPACE/memory" "$OPENCLAW_WORKSPACE/notes"
@@ -79,13 +81,39 @@ for f in "$REPO"/characters/default/*.md; do
 done
 ok "character files: $seeded seeded, the rest already existed ($OPENCLAW_WORKSPACE)"
 
-log "7/7 guard cron entries"
+log "7/9 guard cron entries"
 cur=$(crontab -l 2>/dev/null | grep -v "$REPO/" || true)
 new=$(sed "s#REPO#$REPO#g" "$REPO/guards/crontab.example" | grep -vE '^\s*(#|$)')
 printf '%s\n%s\n' "$cur" "$new" | sed '/^$/d' > "$STATE_DIR/crontab.new"
 # never pipe a generated crontab straight in: an empty file would wipe every entry
 [ "$(grep -c "$REPO/" "$STATE_DIR/crontab.new")" -ge 3 ] || die "generated crontab looks wrong ($STATE_DIR/crontab.new); not installing"
 crontab "$STATE_DIR/crontab.new" && ok "$(crontab -l | grep -c "$REPO/") guard entries installed"
+
+log "8/9 security profile"
+# Asked once; re-running the installer keeps your answer. Change it any time: bin/security.sh, or the console's Security tab.
+if grep -q '^SECURITY_PROFILE=' "$REPO/config/stack.env" 2>/dev/null; then
+  ok "security profile already chosen ($(sed -n 's/^SECURITY_PROFILE=//p' "$REPO/config/stack.env" | tr -d '"'))"
+else
+  "$REPO/bin/security.sh" choose --no-apply || warn "security choice incomplete; run bin/security.sh choose"
+fi
+
+log "9/9 overnight research (optional, VERY BETA)"
+if grep -q '^OVERNIGHT=' "$REPO/config/stack.env" 2>/dev/null; then
+  ok "already chosen (OVERNIGHT=$(sed -n 's/^OVERNIGHT=//p' "$REPO/config/stack.env" | tr -d '"'))"
+elif [ -t 0 ] || { : </dev/tty; } 2>/dev/null; then
+  cat >/dev/tty <<'TXT'
+
+Overnight research (VERY BETA, optional): while you're away, the agent can use the idle GPU to research the projects in
+your notes and have a few ideas ready each morning. It only reads your notes and writes suggestions to a separate folder;
+nothing enters its memory unless you keep an idea. Web research needs a free-to-start Brave Search key (docs/OVERNIGHT.md).
+You can switch it on or off any time in the console's Overnight tab.
+
+TXT
+  printf 'Turn on overnight research now? [y/N]: ' >/dev/tty; read -r a </dev/tty || a=n
+  case "$a" in [yY]*) "$REPO/bin/overnight.sh" set OVERNIGHT on && ok "overnight research is on (01:00-06:00; change it in the Overnight tab)";; *) "$REPO/bin/overnight.sh" set OVERNIGHT off >/dev/null; ok "overnight research stays off";; esac
+else
+  "$REPO/bin/overnight.sh" set OVERNIGHT off >/dev/null; ok "overnight research stays off (unattended install; switch it on in the console's Overnight tab)"
+fi
 
 echo
 echo "Next: put your model in $MODEL_DIR (docs/MODELS.md), then:  bin/up.sh"

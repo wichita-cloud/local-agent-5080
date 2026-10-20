@@ -751,6 +751,56 @@ def voice_listen(d):
         raise RuntimeError(f"speech-to-text not reachable ({e}); the watchdog restarts it within a minute")
 
 
+def security_info():
+    c = cfg()
+    shared, seen = [], {}
+    for item in filter(None, c.get("SHARED_FOLDERS", "").split(";")):
+        path, _, mode = item.partition("|")
+        slug = re.sub(r"[^A-Za-z0-9._-]", "-", os.path.basename(path.rstrip("/"))) or "folder"
+        seen[slug] = seen.get(slug, 0) + 1
+        shared.append({"path": path, "mode": "rw" if mode == "rw" else "ro", "exists": os.path.isdir(path),
+                       "inside": "/shared/%s%s" % (slug, "" if seen[slug] == 1 else "-%d" % seen[slug])})
+    img = c.get("SANDBOX_IMAGE", "local-agent-sandbox:1")
+    rc, _, _ = run(["docker", "image", "inspect", img], timeout=15)
+    return {"profile": c.get("SECURITY_PROFILE", "standard"), "network": c.get("SANDBOX_NETWORK", "off"), "shared": shared,
+            "image": rc == 0, "workspace": c.get("OPENCLAW_WORKSPACE", "")}
+
+
+def security_audit():
+    rc, out, err = run([os.path.join(BIN, "security.sh"), "audit"], timeout=60)
+    return {"text": ANSI.sub("", (out + err).strip())[:6000] or "(no output)"}
+
+
+def _safe_arg(s, what):
+    s = str(s or "").strip()
+    if not s or "\n" in s or len(s) > 600:
+        raise ValueError("bad " + what)
+    return s
+
+
+OVERNIGHT_KEYS = {"OVERNIGHT", "OVERNIGHT_START", "OVERNIGHT_END", "OVERNIGHT_IDLE_MINUTES", "OVERNIGHT_TOPICS",
+                  "OVERNIGHT_SEARCHES_PER_NIGHT", "OVERNIGHT_MONTHLY_SEARCH_LIMIT"}
+
+
+def overnight_info():
+    rc, out, err = run([os.path.join(BIN, "overnight.sh"), "status"], timeout=30)
+    try:
+        return json.loads(out[out.index("{"):])
+    except (ValueError, TypeError):
+        raise RuntimeError("couldn't read the overnight status: " + (err or out)[-200:])
+
+
+def overnight_cmd(*args, stdin=None):
+    try:
+        p = subprocess.run([os.path.join(BIN, "overnight.sh"), *args], capture_output=True, text=True, timeout=60, input=stdin)
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(str(e))
+    text = ANSI.sub("", (p.stdout + p.stderr)).strip()
+    if p.returncode != 0:
+        raise ValueError(text.splitlines()[-1].replace("FAIL", "").strip() if text else "failed")
+    return text
+
+
 # ── jobs: one long-running script at a time, output streamed to the page ────────────────────────────────────────
 JOBS = {
     "verify": lambda d: [os.path.join(BIN, "verify.sh")],
@@ -760,12 +810,22 @@ JOBS = {
     "tune": tune_args,
     "voice-install": lambda d: [os.path.join(BIN, "voice-install.sh")],
     "voice-use": lambda d: [os.path.join(BIN, "voice.sh"), "use", _slug(d.get("voice"))],
+    "overnight-test": lambda d: [os.path.join(BIN, "overnight.sh"), "test"],
+    "overnight-run": lambda d: [os.path.join(BIN, "overnight.sh"), "run"],
+    "security-profile": lambda d: [os.path.join(BIN, "security.sh"), "set", d.get("profile") if d.get("profile") in ("protected", "standard") else _bad("profile")],
+    "security-network": lambda d: [os.path.join(BIN, "security.sh"), "network", "on" if d.get("value") == "on" else "off"],
+    "security-share-add": lambda d: [os.path.join(BIN, "security.sh"), "share", "add", _safe_arg(d.get("path"), "folder"), "rw" if d.get("mode") == "rw" else "ro"],
+    "security-share-remove": lambda d: [os.path.join(BIN, "security.sh"), "share", "remove", _safe_arg(d.get("path"), "folder")],
     "up": lambda d: [os.path.join(BIN, "up.sh")],
     "gateway": lambda d: [os.path.join(BIN, "gateway-up.sh")],
     "ingest": lambda d: ["bash", "-c", '. "$1/bin/lib.sh" && "$VENV/bin/python3" "$1/services/memory_ingest.py"', "x", REPO],
 }
 job = {"id": 0, "kind": None, "proc": None, "log": None, "started": 0, "rc": None}
 job_lock = threading.Lock()
+
+
+def _bad(what):
+    raise ValueError("bad " + what)
 
 
 def _slug(s):
@@ -850,6 +910,12 @@ class H(BaseHTTPRequestHandler):
             if path == "/api/job":
                 m = re.search(r"offset=(\d+)", qs)
                 return self._send(200, job_status(int(m.group(1)) if m else 0))
+            if path == "/api/overnight":
+                return self._send(200, overnight_info())
+            if path == "/api/security":
+                return self._send(200, security_info())
+            if path == "/api/security/audit":
+                return self._send(200, security_audit())
             if path == "/api/voice":
                 return self._send(200, voice_info())
             if path == "/api/voice/clip":            # the cleaned reference clip, so you can hear what the model hears
@@ -899,6 +965,20 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, voice_add(d))
             if path == "/api/voice/remove":
                 return self._send(200, {"log": voice_cmd("remove", _slug(d.get("name")))})
+            if path == "/api/overnight/settings":
+                k = d.get("key")
+                if k not in OVERNIGHT_KEYS:
+                    raise ValueError("unknown setting")
+                overnight_cmd("set", k, str(d.get("value", "")))
+                return self._send(200, {"ok": True})
+            if path == "/api/overnight/key":
+                overnight_cmd("set-key", stdin=str(d.get("key", "")).strip() + "\n")
+                return self._send(200, {"ok": True})
+            if path == "/api/overnight/idea":
+                if d.get("action") not in ("keep", "dismiss"):
+                    raise ValueError("bad action")
+                overnight_cmd(d["action"], str(d.get("id", "")))
+                return self._send(200, {"ok": True})
             if path == "/api/voice/listen":
                 return self._send(200, voice_listen(d))
             if path == "/api/voice/speak":

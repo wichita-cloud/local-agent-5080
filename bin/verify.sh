@@ -89,6 +89,20 @@ if [ -x "$REPO/patches/openclaw-$OPENCLAW_VERSION/apply.sh" ]; then
   if "$REPO/patches/openclaw-$OPENCLAW_VERSION/apply.sh" --check >/dev/null 2>&1; then pass "OpenClaw patches present (marker counts as expected)"
   else fail "OpenClaw patches missing or partial"; hint "patches/openclaw-$OPENCLAW_VERSION/apply.sh --check shows which; re-apply with sudo -E …/apply.sh"; fi
 fi
+if [ "${SECURITY_PROFILE:-standard}" = protected ]; then
+  smode=$(openclaw config get agents.defaults.sandbox.mode 2>/dev/null | tr -d '"[:space:]')
+  elev=$(openclaw config get tools.elevated.enabled 2>/dev/null | tr -d '"[:space:]')
+  if [ "$smode" = all ] && [ "$elev" = false ] && docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1; then pass "security: Protected (the agent's commands run in the sandbox; elevated off)"
+  else fail "security: profile is Protected but the sandbox isn't fully in place (mode=${smode:-?}, elevated=${elev:-?}, image $(docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1 && echo present || echo missing))"; hint "bin/security.sh set protected (builds the image and re-applies)"; fi
+else
+  warn "security: Standard profile: the agent runs commands directly on this PC, which can reach your Windows drives. bin/security.sh set protected puts it in a sandbox (docs/SECURITY.md). Not counted"
+fi
+
+if [ "${OVERNIGHT:-off}" = on ]; then
+  if crontab -l 2>/dev/null | grep -q "$REPO/guards/overnight-tick.sh"; then pass "overnight work: on (${OVERNIGHT_START:-01:00}-${OVERNIGHT_END:-06:00}), cron check installed"
+  else fail "overnight work is on but its 10-minute cron check is missing"; hint "bin/overnight.sh enable-cron"; fi
+  [ -n "${BRAVE_API_KEY:-}" ] || warn "overnight work has no search key (BRAVE_API_KEY): ideas will come from your notes only. Not counted"
+fi
 
 layer "6 GPU memory (the silent 6x slowdown)"
 if command -v powershell.exe >/dev/null 2>&1; then

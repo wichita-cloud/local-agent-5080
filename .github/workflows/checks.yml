@@ -25,6 +25,8 @@ jobs:
         run: shellcheck -S error bin/*.sh guards/*.sh patches/*/apply.sh
       - name: python compiles
         run: python3 -m py_compile services/*.py console/server.py bin/mtp-graft.py patches/openclaw-*/*.py
+      - name: overnight job logic (time window, private-address guard, JSON recovery)
+        run: STATE_DIR=/tmp/ov python3 services/overnight.py selftest
 
   memory-service-packages:
     # bin/install.sh step 4, on the Ubuntu this was built on (22.04) and the next one (24.04, Python 3.12)
@@ -105,3 +107,42 @@ jobs:
             if docker manifest inspect "$img" >/dev/null 2>&1; then echo "ok   $img"; else echo "FAIL $img"; rc=1; fi
           done
           exit $rc
+
+  sandbox-image:
+    # The Protected profile's sandbox image must keep building (the base image and Debian packages drift), and must run as a
+    # normal user. bin/security.sh builds the same Dockerfile on a user's PC.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: build the sandbox image
+        run: docker build -t local-agent-sandbox:1 -f docker/sandbox.Dockerfile docker
+      - name: runs as an ordinary user, with the tools the agent expects
+        run: |
+          docker run --rm --network none local-agent-sandbox:1 sh -c 'test "$(id -u)" = 1000 && bash --version | head -1 && python3 --version && git --version && jq --version && rg --version | head -1 && curl --version | head -1'
+      - name: the sandbox's hardening flags hold (read-only, no network, no root, process and memory limits)
+        run: |
+          F="--read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges --network none --pids-limit 256 --memory 4g --memory-swap 4g --user 1000:1000"
+          docker run --rm $F local-agent-sandbox:1 sh -c 'touch /etc/x 2>/dev/null && { echo "wrote to /etc"; exit 1; }; echo ro-ok'
+          docker run --rm $F local-agent-sandbox:1 sh -c 'curl -sS -m 4 https://example.com >/dev/null 2>&1 && { echo "had network"; exit 1; }; echo no-network-ok'
+          docker run --rm $F local-agent-sandbox:1 sh -c 'sudo -n true 2>/dev/null && { echo "sudo works"; exit 1; }; echo no-sudo-ok'
+          docker run --rm $F local-agent-sandbox:1 python3 -c "
+          import os, time
+          n = 0
+          try:
+              for _ in range(1000):
+                  if os.fork() == 0:
+                      time.sleep(4); os._exit(0)
+                  n += 1
+          except OSError:
+              pass
+          print('forked', n)
+          assert n < 300, 'process limit not enforced'"
+      - name: share-folder safety rules (bin/security.sh refuses broad or sensitive folders)
+        run: |
+          mkdir -p "$HOME/.ssh" "$HOME/projects/plans"
+          cp config/stack.env.example config/stack.env
+          for p in / /etc "$HOME" "$HOME/.ssh" /nonexistent "/tmp/a;b"; do
+            if bin/security.sh share add "$p" ro --no-apply >/dev/null 2>&1; then echo "SHOULD HAVE REFUSED: $p"; exit 1; fi
+          done
+          bin/security.sh share add "$HOME/projects/plans" ro --no-apply
+          grep -q "projects/plans|ro" config/stack.env

@@ -28,7 +28,7 @@ Start with `bin/verify.sh` and fix the **lowest** failing layer first.
 |---|---|---|
 | Tool call appears as text in the chat, nothing runs | `patches/openclaw-2026.3.11/apply.sh --check` | re-apply, then `bin/gateway-up.sh` (reinstalling OpenClaw removes patches) |
 | `EACCES … mkdir '/memory'` or `/workspace` | model invented an absolute path | patch 08 remaps these; check it's applied |
-| web_search "missing_brave_api_key" | `config/secrets.env` BRAVE_API_KEY | set it, then `bin/gateway-up.sh` |
+| web_search "missing_brave_api_key" | `config/secrets.env` BRAVE_API_KEY | get a key (docs/OVERNIGHT.md, "Getting a Brave Search API key"), set it, then `bin/gateway-up.sh` (or paste it in the Overnight tab) |
 | web_search HTTP 402 | Brave plan quota used up | not a bug; check your Brave dashboard |
 | Research fills the context after 2-3 fetches | patch 10 present? | apply it |
 | Agent never sees a long instruction file's tail | `bootstrapMaxChars` < file size | raise BOOTSTRAP_MAX_CHARS, `bin/gateway-up.sh` |
@@ -61,3 +61,13 @@ Start with `bin/verify.sh` and fix the **lowest** failing layer first.
 - **Don't `pgrep -f`/`pkill -f` by script name**; it matches the shell running the search. Use the port owner.
 - **A Windows `.exe` called from a bash heredoc swallows the rest of stdin**, and so does `ssh` without `-n`. Run scripts from files, and use `</dev/null`.
 - **Read a write back.** `docker exec` without `-i` or `ssh -n` plus `cat > file` writes 0 bytes and returns success.
+
+## Security profile and the sandbox (Protected)
+| Symptom | First check | Fix |
+|---|---|---|
+| The agent says its commands fail or "can't run commands" | `bin/security.sh status`: is the sandbox image ready? `docker ps` works from WSL? | start Docker Desktop (WSL integration on), then `bin/security.sh set protected` (builds the image if missing) |
+| A command needs the internet (`pip install`, `git clone`) and fails with "could not resolve host" | expected: the sandbox has no internet by default | Security tab → allow the sandbox internet, or `bin/security.sh network on`. Fetching web pages works without it |
+| The agent can't find my project files | the folder isn't shared: `bin/security.sh share list` | Security tab → Share folder (paste the full path); inside the sandbox it is `/shared/<folder name>` |
+| "refused: ... whole Windows user profile / credentials / system folders" when sharing | by design | share a specific project folder inside it |
+| Changed a sandbox setting but nothing changed | `docker ps` shows an old `openclaw-sbx-*` container | `bin/gateway-up.sh` replaces it; or `docker rm -f` the container and ask the agent something |
+| Want the old behaviour (agent works directly on the PC) | `bin/security.sh status` | `bin/security.sh set standard` (read docs/SECURITY.md first) |

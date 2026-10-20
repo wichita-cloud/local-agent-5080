@@ -96,6 +96,13 @@ details.adv{margin-top:8px}details.adv summary{font-size:13px;color:var(--mut)}
 .advrow:first-of-type{border-top:0}.advrow label{margin:0;font-size:13px;font-weight:600}
 .advrow input,.advrow select{padding:4px 7px}.advrow.changed label::after{content:" •";color:var(--warn)}
 @media (max-width:640px){.advrow{grid-template-columns:1fr 110px}.advrow .small{grid-column:1/-1}}
+.ovsw{display:flex;gap:8px;align-items:center;font-weight:600;margin:0;color:var(--fg);font-size:15px}.ovsw input{width:auto;transform:scale(1.4)}
+.idea{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--panel)}.idea.done{opacity:.65}
+.secopts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:700px){.secopts{grid-template-columns:1fr}}
+.secopt{display:flex;flex-direction:column;gap:6px;text-align:left;font:inherit;color:var(--fg);background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:14px;cursor:pointer}
+.secopt.sel{border-color:var(--acc);background:var(--soft)}
+.secopt:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 /* voice tab: a conversation view first, settings behind "Advanced settings" */
 :root{--onacc:#fff}
 :root[data-theme="dark"]{--onacc:#111}
@@ -155,6 +162,8 @@ details.adv{margin-top:8px}details.adv summary{font-size:13px;color:var(--mut)}
     <button role="tab" data-tab="models" aria-selected="false">Models</button>
     <button role="tab" data-tab="character" aria-selected="false">Character</button>
     <button role="tab" data-tab="voice" aria-selected="false">Voice</button>
+    <button role="tab" data-tab="overnight" aria-selected="false">Overnight</button>
+    <button role="tab" data-tab="security" aria-selected="false">Security</button>
   </nav>
 </div></header>
 
@@ -294,6 +303,128 @@ details.adv{margin-top:8px}details.adv summary{font-size:13px;color:var(--mut)}
 </section>
 
 <!-- ═══════════════════════════════ VOICE ═══════════════════════════════ -->
+<section id="tab-overnight" hidden>
+  <div class="card">
+    <h2 style="margin-top:0">Put the GPU to work while you're away <span class="tag w" style="vertical-align:middle">VERY BETA</span></h2>
+    <p class="small" style="margin-top:-2px;color:var(--warn)"><b>New and lightly tested.</b> It only reads your notes and writes suggestions to a separate folder, but expect rough edges. Off unless you switch it on.</p>
+    <p class="small" style="margin-top:-4px">While you sleep or are out, the agent can research the things you're working on and have a few ideas ready in the morning.</p>
+    <ol class="small" style="line-height:1.65;margin:8px 0 0">
+      <li><b>It waits until you're away:</b> inside the hours you choose, with no game running, nobody chatting with the agent for a while, and the model free.</li>
+      <li><b>It picks what to research</b> from your recent notes and the topics you write below, and checks that its memory still finds things (a report only: it changes nothing).</li>
+      <li><b>It searches the web within a hard budget</b> (searches per night and per month, below), reads the top page of each, and writes 3 to 5 ideas with sources.</li>
+      <li><b>You decide what stays.</b> Ideas wait here. Press <i>Keep</i> to add one to the agent's memory; nothing goes in on its own.</li>
+    </ol>
+    <p class="small mut" style="margin-bottom:0">Everything stays on this PC except the search itself (the search words go to Brave). Web text is treated as untrusted: this job gives the model no tools and ignores any instructions found on a page.</p>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <h2 style="margin:0">Overnight work</h2>
+      <label class="ovsw"><input type="checkbox" id="ovOn"> <span id="ovOnLabel">Off</span></label>
+    </div>
+    <p class="small" id="ovStatus" style="margin:8px 0 0"></p>
+    <div class="btns">
+      <button class="b pri needsidle" id="ovTest">Test it now (about a minute)</button>
+      <button class="b needsidle" id="ovRun" title="The real run, if nothing is using the machine, ignoring the hours">Run tonight's job now</button>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2 style="margin-top:0">When and what</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label for="ovStart">Start (local time)</label><input id="ovStart" type="time"></div>
+        <div><label for="ovEnd">Finish by</label><input id="ovEnd" type="time"></div>
+      </div>
+      <p class="small mut" style="margin:4px 0 0">It can run past midnight (for example 23:00 to 06:00), and it stops at the finish time.</p>
+      <label for="ovIdle">Wait until I haven't chatted with the agent for (minutes)</label><input id="ovIdle" type="number" min="1" max="240">
+      <label for="ovTopics">What should it look into? (in your own words)</label>
+      <textarea id="ovTopics" rows="4" placeholder="e.g. my kitchen renovation: cabinets, electrical upgrades; ways to organize surplus produce pickups for the food pantry"></textarea>
+      <p class="small mut" style="margin:4px 0 0">It also reads your recent notes (the agent's <span class="mono">memory/</span> and <span class="mono">notes/</span> folders).</p>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0">Web searches</h2>
+      <p class="small mut" style="margin-top:-4px">Uses the Brave Search API. Many plans have a monthly free quota, so these limits are hard stops, counted here.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label for="ovPerNight">Most per night</label><input id="ovPerNight" type="number" min="0" max="100"></div>
+        <div><label for="ovPerMonth">Most per month</label><input id="ovPerMonth" type="number" min="0" max="100000"></div>
+      </div>
+      <div class="stat" style="margin-top:12px"><div class="k">Searches used</div><div class="v" id="ovUsage">–</div><div class="meter"><i id="ovMeter" style="width:0"></i></div>
+        <div class="d">This job only. The agent's own web searches in the daytime use the same Brave quota, so keep the monthly limit below your plan's total.</div></div>
+      <label for="ovKey" id="ovKeyLabel">Brave Search API key</label>
+      <div style="display:flex;gap:8px"><input id="ovKey" type="password" autocomplete="off" placeholder="paste your key"><button class="b needsidle" id="ovKeySave">Save key</button></div>
+      <p class="small mut" style="margin:4px 0 0">It is saved in <span class="mono">config/secrets.env</span> (only you can read it). Without a key the job still runs, using your notes only.</p>
+      <details style="margin-top:8px"><summary>How do I get a key? (about 5 minutes)</summary>
+        <ol class="small" style="line-height:1.6;margin:8px 0 0">
+          <li>Create an account on Brave's API dashboard: <span class="mono">api-dashboard.search.brave.com</span> (the product page is <span class="mono">brave.com/search/api</span>).</li>
+          <li>Pick a <b>Search</b> plan. At the time of writing Brave gives about <b>$5 of credit every month</b> (roughly 1,000 searches) and asks for a payment card on file to receive it; some older accounts keep a free plan of 2,000 queries a month. <b>Brave has changed this more than once, so read the pricing page first</b>, and set a usage limit in the dashboard so you can never be charged beyond the credit.</li>
+          <li>Create an API key in the dashboard (<i>API Keys</i>) and copy it.</li>
+          <li>Paste it above and press <i>Save key</i>.</li>
+          <li>Set "Most per month" to less than your plan's quota, leaving room for the agent's own daytime searches, which use the same quota.</li>
+        </ol></details>
+    </div>
+  </div>
+  <div class="btns" style="margin:0 0 16px"><button class="b pri" id="ovSave">Save settings</button></div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Ideas from the last run</h2>
+    <div id="ovIdeas"><p class="small mut" style="margin:0">Nothing yet. Press <b>Test it now</b> to see what a run produces, or wait for the first night.</p></div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Memory check</h2>
+    <p class="small mut" style="margin-top:-4px">Each run asks the model to write test questions about a sample of your stored memories, then checks whether search finds the right one. It only reports; it never changes your memories. A falling number is the early warning that search got worse.</p>
+    <div id="ovCheck" class="small">Not run yet (it starts once there are at least 40 memories).</div>
+  </div>
+</section>
+
+<section id="tab-security" hidden>
+  <div class="card">
+    <h2 style="margin-top:0">How much of your PC can the agent touch?</h2>
+    <p class="small mut" style="margin-top:-4px">The agent can run commands and change files. If it reads something malicious (a web page, a document) or just makes
+      a mistake, the damage is limited to what it can reach. Web research works in both modes.</p>
+    <div class="secopts" role="radiogroup" aria-label="Security profile">
+      <button class="secopt" id="secProtected" role="radio" aria-checked="false">
+        <b>Protected</b> <span class="tag on">recommended</span>
+        <span class="small mut">Its commands run in a sandbox that sees only its own workspace and the folders you share. No internet from inside it, and no
+          access to your Windows drives, SSH keys or other files.</span></button>
+      <button class="secopt" id="secStandard" role="radio" aria-checked="false">
+        <b>Standard</b>
+        <span class="small mut">Its commands run directly on your PC with your WSL account's access, including your Windows drives. Simpler; a bigger blast radius.</span></button>
+    </div>
+    <p class="small" id="secState" style="margin:10px 0 0"></p>
+  </div>
+
+  <div id="secProtectedOnly" hidden>
+    <div class="card">
+      <h2 style="margin-top:0">Folders shared with the agent</h2>
+      <p class="small mut" style="margin-top:-4px">Besides its own workspace, the agent can use only these. Share the folder with your project files (read-only is the safe
+        default). Inside the sandbox each appears under <span class="mono">/shared/&lt;folder name&gt;</span>; the agent is told where in a file called <span class="mono">shared-folders.md</span>.</p>
+      <div id="secShared"></div>
+      <div style="display:grid;grid-template-columns:1fr 150px auto;gap:8px;margin-top:12px;align-items:end">
+        <div><label for="secPath">Folder (paste the full path)</label><input id="secPath" placeholder="C:\Users\you\Documents\Renovation   or   /mnt/c/Users/you/Documents/Renovation"></div>
+        <div><label for="secMode">Agent may</label><select id="secMode"><option value="ro">read only</option><option value="rw">read and change</option></select></div>
+        <button class="b pri needsidle" id="secAdd">Share folder</button>
+      </div>
+      <p class="small mut">Whole drives, your whole user profile, credential folders and system folders are refused.</p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">Internet from inside the sandbox</h2>
+      <p class="small mut" style="margin-top:-4px">Off by default. Turn it on if the agent needs to install packages or download files with its commands. Fetching web pages
+        and searching work either way (they don't run inside the sandbox).</p>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:400;margin:0"><input type="checkbox" id="secNet" style="width:auto"> Allow commands in the sandbox to use the internet</label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Security check</h2>
+    <p class="small mut" style="margin-top:-4px">OpenClaw's own audit of its settings, plus this page's state.</p>
+    <div class="btns" style="margin-top:0"><button class="b" id="secAudit">Run the check</button></div>
+    <pre id="secAuditOut" class="note mono" hidden style="white-space:pre-wrap"></pre>
+  </div>
+</section>
+
 <section id="tab-voice" hidden>
   <div class="card" id="vNotInstalled" hidden>
     <h2>Give the agent a voice (optional)</h2>
@@ -417,7 +548,7 @@ function showTab(t) {
   $$("main > section").forEach(s => s.hidden = s.id !== "tab-" + t);
   try { localStorage.setItem("console.tab", t); } catch (e) {}
   if (location.hash !== "#" + t) history.replaceState(null, "", "#" + t);
-  if (t === "models") loadModels(); if (t === "character") loadCharacter(); if (t === "voice") loadVoice();
+  if (t === "models") loadModels(); if (t === "character") loadCharacter(); if (t === "voice") loadVoice(); if (t === "security") loadSecurity(); if (t === "overnight") loadOvernight();
 }
 $$("nav button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
 
@@ -482,7 +613,7 @@ async function startJob(kind, extra = {}) {
   try { await api("/api/job", {kind, ...extra}); } catch (e) { toast(e.message); return; }
   jobOffset = 0; $("#actLog").textContent = ""; $("#activity").hidden = false; $("#activity").classList.remove("min");
   $("#actTitle").textContent = {bench: "Benchmark", verify: "Full verify", switch: "Switching model", download: "Downloading model",
-    up: "Bringing everything up", gateway: "Restarting the agent", ingest: "Re-indexing notes", tune: "Applying model settings", "voice-install": "Installing voice", "voice-use": "Changing the agent's voice"}[kind] || kind;
+    up: "Bringing everything up", gateway: "Restarting the agent", ingest: "Re-indexing notes", tune: "Applying model settings", "voice-install": "Installing voice", "voice-use": "Changing the agent's voice", "overnight-test": "Testing the overnight job", "overnight-run": "Running the overnight job", "security-profile": "Changing the security profile", "security-network": "Changing sandbox internet access", "security-share-add": "Sharing a folder", "security-share-remove": "Removing a shared folder"}[kind] || kind;
   setJobButtons(true); pollJob();
 }
 async function pollJob() {
@@ -495,7 +626,7 @@ async function pollJob() {
     if (j.running) { st.className = "pill s-wait"; st.textContent = `running ${j.elapsed}s`; jobTimer = setTimeout(pollJob, 1000); return; }
     st.className = "pill " + (j.rc === 0 ? "s-ok" : "s-fail"); st.textContent = j.rc === 0 ? "done" : `finished with errors (exit ${j.rc})`;
   }
-  setJobButtons(false); loadStatus(); if (tab === "models") loadModels(); if (tab === "character") loadCharacter(true); if (tab === "voice") loadVoice();
+  setJobButtons(false); loadStatus(); if (tab === "models") loadModels(); if (tab === "character") loadCharacter(true); if (tab === "voice") loadVoice(); if (tab === "security") loadSecurity(); if (tab === "overnight") loadOvernight(true);
 }
 function setJobButtons(busy) { $$("[data-job]").forEach(b => b.disabled = busy); $$(".needsidle").forEach(b => b.disabled = busy); }
 document.addEventListener("click", e => {
@@ -862,8 +993,95 @@ $("#vAdd").onclick = async () => {
   b.disabled = false; b.textContent = "Add voice";
 };
 
+/* ── overnight (bin/overnight.sh does the work) ── */
+let lastOv = null;
+const pct = x => Math.round((x || 0) * 100) + "%";
+function ovWhen(iso) { try { return new Date(iso).toLocaleString([], {weekday: "short", hour: "2-digit", minute: "2-digit"}); } catch (e) { return iso; } }
+async function loadOvernight(keepForm) {
+  const o = await api("/api/overnight").catch(e => (toast(e.message), null)); if (!o) return; lastOv = o;
+  const s = o.settings;
+  $("#ovOn").checked = s.on; $("#ovOnLabel").textContent = s.on ? "On" : "Off";
+  if (!keepForm) {
+    $("#ovStart").value = s.start; $("#ovEnd").value = s.end; $("#ovIdle").value = s.idle; $("#ovTopics").value = s.topics;
+    $("#ovPerNight").value = s.per_night; $("#ovPerMonth").value = s.per_month;
+  }
+  $("#ovKeyLabel").textContent = o.key_set ? "Brave Search API key (saved)" : "Brave Search API key (not set)";
+  let st;
+  if (!s.on) st = "Off. Switch it on and choose your hours; it only works while you're away.";
+  else if (o.running) st = "Working right now…";
+  else if (o.done_tonight) st = `Done for tonight (${esc(s.start)}–${esc(s.end)}). Ideas are below.`;
+  else if (o.in_window) st = o.waiting ? `Inside tonight's window (${esc(s.start)}–${esc(s.end)}), waiting: ${esc(o.waiting)}.` : `Inside tonight's window (${esc(s.start)}–${esc(s.end)}); it starts at the next 10-minute check.`;
+  else st = `On. Next window: ${esc(s.start)}–${esc(s.end)}.`;
+  const l = o.last;
+  if (l && l.status) st += ` Last run: ${esc(ovWhen(l.finished || l.started))}${l.test ? " (a test)" : ""}, ${esc(l.status)}${l.detail ? " (" + esc(l.detail) + ")" : ""}.`;
+  $("#ovStatus").innerHTML = st;
+  const used = o.usage.month, cap = s.per_month || 1;
+  $("#ovUsage").textContent = `${used} of ${s.per_month} this month · ${o.usage.tonight} of ${s.per_night} tonight`;
+  $("#ovMeter").style.width = Math.min(100, used / cap * 100) + "%";
+  const ideas = (l && l.ideas) || [];
+  $("#ovIdeas").innerHTML = ideas.length ? ideas.map(i => `<div class="idea ${i.state !== "new" ? "done" : ""}"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+      <b>${esc(i.title)}</b><span class="tag ${i.state === "kept" ? "on" : ""}">${i.state === "new" ? "new" : i.state}</span></div>
+      <div style="margin:6px 0">${esc(i.idea)}</div>
+      ${i.why ? `<div class="small mut"><b>Why it fits:</b> ${esc(i.why)}</div>` : ""}
+      ${i.next_step ? `<div class="small mut"><b>First step:</b> ${esc(i.next_step)}</div>` : ""}
+      ${i.sources.length ? `<div class="small">${i.sources.map(u => /^https?:\/\//.test(u) ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(u.replace(/^https?:\/\//, "").slice(0, 60))}</a>` : "").join(" · ")}</div>` : ""}
+      ${i.state === "new" ? `<div class="btns" style="margin-top:8px"><button class="b pri" data-ovidea="keep" data-id="${esc(i.id)}">Keep (add to memory)</button><button class="b" data-ovidea="dismiss" data-id="${esc(i.id)}">Dismiss</button></div>` : ""}</div>`).join("")
+    : `<p class="small mut" style="margin:0">${l && l.status && l.status !== "ok" ? esc(l.detail || l.status) : "Nothing yet. Press <b>Test it now</b> to see what a run produces, or wait for the first night."}</p>`;
+  const mc = l && l.memory_check, h = o.memory_history || [];
+  if (mc && !mc.skipped) {
+    const prev = h.length > 1 ? h[h.length - 2] : null, delta = prev ? Math.round((mc.overall - prev.overall) * 100) : null;
+    $("#ovCheck").innerHTML = `Search found the right memory <b>${pct(mc.overall)}</b> of the time on ${mc.n} test questions (exact words ${pct(mc.exact)}, reworded ${pct(mc.paraphrase)}, natural questions ${pct(mc.task)}) across ${mc.memories} memories.` +
+      (delta === null ? "" : delta === 0 ? " Unchanged since the previous check." : delta > 0 ? ` Up ${delta} points since the previous check.` : ` <b style="color:var(--bad)">Down ${-delta} points since the previous check.</b>`);
+  } else if (mc && mc.skipped) $("#ovCheck").textContent = "Skipped: " + mc.skipped + ".";
+}
+async function ovSave() {
+  const set = (key, value) => api("/api/overnight/settings", {key, value: String(value)});
+  try {
+    await set("OVERNIGHT_START", $("#ovStart").value); await set("OVERNIGHT_END", $("#ovEnd").value); await set("OVERNIGHT_IDLE_MINUTES", $("#ovIdle").value);
+    await set("OVERNIGHT_TOPICS", $("#ovTopics").value); await set("OVERNIGHT_SEARCHES_PER_NIGHT", $("#ovPerNight").value); await set("OVERNIGHT_MONTHLY_SEARCH_LIMIT", $("#ovPerMonth").value);
+    toast("Saved"); loadOvernight();
+  } catch (e) { toast(e.message); }
+}
+$("#ovSave").onclick = ovSave;
+$("#ovOn").onchange = async () => { try { await api("/api/overnight/settings", {key: "OVERNIGHT", value: $("#ovOn").checked ? "on" : "off"}); await ovSave(); } catch (e) { toast(e.message); loadOvernight(); } };
+$("#ovTest").onclick = () => startJob("overnight-test");
+$("#ovRun").onclick = () => { if (confirm("Run tonight's job now? It uses the GPU for a few minutes, and the agent's replies will be slower while it runs.")) startJob("overnight-run"); };
+$("#ovKeySave").onclick = async () => { const k = $("#ovKey").value.trim(); if (!k) return toast("Paste the key first");
+  try { await api("/api/overnight/key", {key: k}); $("#ovKey").value = ""; toast("Key saved"); loadOvernight(true); } catch (e) { toast(e.message); } };
+document.addEventListener("click", async e => { const b = e.target.closest("[data-ovidea]"); if (!b) return; b.disabled = true;
+  try { await api("/api/overnight/idea", {id: b.dataset.id, action: b.dataset.ovidea}); toast(b.dataset.ovidea === "keep" ? "Kept: it will be searchable after the next indexing (nightly, or Re-index notes)" : "Dismissed"); loadOvernight(true); } catch (er) { toast(er.message); b.disabled = false; } });
+
+/* ── security (bin/security.sh does the work) ── */
+let lastSec = null;
+async function loadSecurity() {
+  const s = await api("/api/security").catch(e => (toast(e.message), null)); if (!s) return; lastSec = s;
+  const prot = s.profile === "protected";
+  $("#secProtected").setAttribute("aria-checked", prot); $("#secStandard").setAttribute("aria-checked", !prot);
+  $("#secProtected").classList.toggle("sel", prot); $("#secStandard").classList.toggle("sel", !prot);
+  $("#secProtectedOnly").hidden = !prot;
+  $("#secState").innerHTML = prot
+    ? (s.image ? "The agent is running in the sandbox." : '<span style="color:var(--bad)">The sandbox image isn\'t built, so the agent can\'t run commands. Choose Protected again to build it.</span>')
+    : '<span style="color:var(--warn)">Standard: the agent can read and change anything your WSL account can, including your Windows drives.</span>';
+  $("#secNet").checked = s.network === "on";
+  $("#secShared").innerHTML = s.shared.length ? s.shared.map(x => `<div class="model"><div><div class="name mono" style="font-weight:500">${esc(x.path)}</div>
+      <div class="small mut">${x.mode === "rw" ? "the agent may read and change files here" : "read-only"} · inside the sandbox: <span class="mono">${esc(x.inside)}</span>${x.exists ? "" : ' · <b style="color:var(--bad)">folder not found</b>'}</div></div>
+      <div class="btns" style="margin-top:0"><button class="b needsidle" data-secrm="${esc(x.path)}">Stop sharing</button></div></div>`).join("")
+    : '<p class="small mut" style="margin:0">None yet: the agent only has its own workspace.</p>';
+}
+function secJob(kind, extra, title) { startJob(kind, extra); }
+$("#secProtected").onclick = () => { if (lastSec && lastSec.profile !== "protected") startJob("security-profile", {profile: "protected"}); };
+$("#secStandard").onclick = () => { if (lastSec && lastSec.profile !== "standard" &&
+  confirm("Standard lets the agent read and change anything your WSL account can, including your Windows drives. Switch anyway?")) startJob("security-profile", {profile: "standard"}); };
+$("#secAdd").onclick = () => { const p = $("#secPath").value.trim(); if (!p) return toast("Paste the folder's full path");
+  if ($("#secMode").value === "rw" && !confirm("Let the agent change and delete files in this folder? Read-only is safer.")) return;
+  startJob("security-share-add", {path: p, mode: $("#secMode").value}); $("#secPath").value = ""; };
+$("#secNet").onchange = () => startJob("security-network", {value: $("#secNet").checked ? "on" : "off"});
+document.addEventListener("click", e => { const b = e.target.closest("[data-secrm]"); if (b && confirm("Stop sharing this folder with the agent?")) startJob("security-share-remove", {path: b.dataset.secrm}); });
+$("#secAudit").onclick = async () => { const o = $("#secAuditOut"), b = $("#secAudit"); b.disabled = true; o.hidden = false; o.textContent = "Checking…";
+  try { o.textContent = (await api("/api/security/audit")).text; } catch (e) { o.textContent = e.message; } b.disabled = false; };
+
 /* ── start ── */
-{ const h = location.hash.slice(1); let t = ["health", "models", "character", "voice"].includes(h) ? h : null;
+{ const h = location.hash.slice(1); let t = ["health", "models", "character", "voice", "overnight", "security"].includes(h) ? h : null;
   if (!t) try { t = localStorage.getItem("console.tab"); } catch (e) {}
   if (t) showTab(t); }
 loadStatus(); setInterval(() => { if (!document.hidden) loadStatus(); }, 15000);

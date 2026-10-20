@@ -56,6 +56,66 @@ if [ -f "$VOICE_VENV/.stt-installed" ]; then
   oc tools.media.audio "{\"enabled\":true,\"maxBytes\":20971520,\"timeoutSeconds\":60,\"models\":[{\"type\":\"cli\",\"command\":\"$REPO/bin/stt-cli.sh\",\"args\":[\"{{MediaPath}}\"],\"timeoutSeconds\":60}]}"
 fi
 
+# Security profile (bin/security.sh). Protected: the agent's commands and file edits run in a Docker container that sees only
+# its own workspace plus the folders listed in SHARED_FOLDERS, with no internet unless SANDBOX_NETWORK=on, and "elevated"
+# (run on the host) is off. If Docker or the image is missing this stays Protected and commands fail rather than quietly
+# running on your PC; bin/security.sh set standard is the deliberate way out.
+# OpenClaw's default sandbox tool list drops web fetch, memory search and TTS, which would break research and recall, so
+# they are allowed back explicitly; the dangerous ones (browser control, gateway, cron, nodes) stay denied.
+if [ "${SECURITY_PROFILE:-standard}" = protected ]; then
+  SBX=$(python3 - <<'PY'
+import json, os
+binds, seen = [], {}
+for item in filter(None, os.environ.get("SHARED_FOLDERS", "").split(";")):
+    path, _, mode = item.partition("|")
+    slug = "".join(c if c.isalnum() or c in "-_." else "-" for c in os.path.basename(path.rstrip("/"))) or "folder"
+    seen[slug] = seen.get(slug, 0) + 1
+    binds.append("%s:/shared/%s%s:%s" % (path, slug, "" if seen[slug] == 1 else "-%d" % seen[slug], "rw" if mode == "rw" else "ro"))
+# OpenClaw already starts the container read-only, as user 1000, with all capabilities dropped, no-new-privileges and no
+# privileged mode. These add limits so a runaway command can't take the machine down: a cap on processes (fork bombs), on
+# memory (no swap), and on CPU time so it can't starve the model (llama keeps its own cores either way).
+docker = {"image": os.environ.get("SANDBOX_IMAGE", "local-agent-sandbox:1"), "network": "bridge" if os.environ.get("SANDBOX_NETWORK") == "on" else "none",
+          "pidsLimit": 256, "memory": os.environ.get("SANDBOX_MEMORY", "4g"), "memorySwap": os.environ.get("SANDBOX_MEMORY", "4g"), "cpus": int(os.environ.get("SANDBOX_CPUS", "4"))}
+if binds:
+    docker["binds"] = binds
+    # OpenClaw only allows binds inside the workspace unless told otherwise. The list comes only from bin/security.sh,
+    # which refuses whole drives, user profiles, credentials and system folders.
+    docker["dangerouslyAllowExternalBindSources"] = True
+print(json.dumps({"mode": "all", "scope": "agent", "workspaceAccess": "rw", "docker": docker}))
+PY
+)
+  oc agents.defaults.sandbox "$SBX"
+  oc tools.sandbox.tools '{"allow":["group:runtime","group:fs","group:sessions","group:memory","web_fetch","web_search","image","tts","message","agents_list"]}'
+  oc tools.elevated '{"enabled":false}'
+  if command -v docker >/dev/null 2>&1; then
+    # a changed sandbox setting only reaches a container when it is created, so drop the old one (it is recreated on demand)
+    h=$(printf '%s' "$SBX" | md5sum | cut -d' ' -f1)
+    if [ "$(cat "$STATE_DIR/sandbox.cfg.md5" 2>/dev/null)" != "$h" ]; then
+      docker ps -aq --filter name=openclaw-sbx 2>/dev/null | xargs -r docker rm -f >/dev/null 2>&1; printf '%s' "$h" > "$STATE_DIR/sandbox.cfg.md5"
+    fi
+    docker image inspect "${SANDBOX_IMAGE:-local-agent-sandbox:1}" >/dev/null 2>&1 \
+      || warn "Protected profile, but the sandbox image isn't built: the agent can't run commands until you run bin/security.sh set protected"
+  else warn "Protected profile, but Docker isn't reachable: the agent can't run commands until it is"; fi
+  [ "$(openclaw config get agents.defaults.sandbox.mode 2>/dev/null | tr -d '"[:space:]')" = all ] || warn "the sandbox setting didn't stick; run bin/gateway-up.sh again and read its warnings"
+else
+  oc agents.defaults.sandbox '{"mode":"off"}'
+fi
+# Tell the agent where its shared folders are (it can't see the host's paths from inside the sandbox)
+if [ "${SECURITY_PROFILE:-standard}" = protected ] && [ -n "${SHARED_FOLDERS:-}" ]; then
+  python3 - "$OPENCLAW_WORKSPACE/shared-folders.md" <<'PYX'
+import os, sys
+rows, seen = [], {}
+for item in filter(None, os.environ["SHARED_FOLDERS"].split(";")):
+    path, _, mode = item.partition("|")
+    slug = "".join(c if c.isalnum() or c in "-_." else "-" for c in os.path.basename(path.rstrip("/"))) or "folder"
+    seen[slug] = seen.get(slug, 0) + 1
+    rows.append("- `/shared/%s%s`: %s" % (slug, "" if seen[slug] == 1 else "-%d" % seen[slug],
+                "you may read and change files here" if mode == "rw" else "read-only: you may read but not change anything here"))
+os.makedirs(os.path.dirname(sys.argv[1]), exist_ok=True)
+open(sys.argv[1], "w").write("# Folders shared with you\n\nThese are available inside your sandbox in addition to your own workspace:\n\n" + "\n".join(rows) + "\n")
+PYX
+else rm -f "$OPENCLAW_WORKSPACE/shared-folders.md"; fi
+
 # Pin the dashboard token (generate once, save to secrets.env)
 if [ -z "${GATEWAY_TOKEN:-}" ]; then
   GATEWAY_TOKEN=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')

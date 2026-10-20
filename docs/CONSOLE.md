@@ -98,7 +98,12 @@ The agent's personality and rules are plain Markdown files in its workspace (`OP
 - **Memory** is separate from character: notes the agent writes under `memory/` are indexed nightly (or with the
   *Re-index* button) and recalled automatically. A fresh install starts with none.
 
-## Security
+## Voice, Overnight and Security tabs
+- **Voice:** a conversation with the agent by microphone or keyboard, with change/add voice under Advanced settings (docs/VOICE.md).
+- **Overnight:** explains the overnight job, sets its hours, topics and search limits, shows the ideas from the last run with Keep / Dismiss, and the memory check (docs/OVERNIGHT.md).
+- **Security:** choose Protected (sandbox) or Standard, share folders with the agent, allow the sandbox internet, run OpenClaw's security check (docs/SECURITY.md).
+
+## Security of the console itself
 - Binds to 127.0.0.1 only. Windows reaches it through WSL's localhost forwarding; other machines can't.
 - Requests with a foreign `Host` header are refused (DNS rebinding), and every POST needs the header `X-Console: 1`.
   Browsers won't let another website send that header without a CORS approval the console never gives, so a web

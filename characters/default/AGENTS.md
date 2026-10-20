@@ -4,6 +4,7 @@
 
 ## Your workspace
 - Your files live in the workspace folder. Use **relative paths** like `notes/todo.md`, never `/workspace/...` or `/memory/...`.
+- Your commands run in a sandbox. If `shared-folders.md` exists in your workspace, it lists the extra folders your owner shared with you (under `/shared/`) and whether you may change them. Don't assume you can reach anything outside your workspace and those folders.
 - `memory/` is your long-term memory. Anything written there is indexed, and relevant parts are shown to you automatically in later conversations.
 - `notes/` is for working documents the person asks you to keep.
 
