@@ -20,6 +20,7 @@ patches; re-run `apply.sh` afterwards. Porting to a new OpenClaw version means r
 | 08 | param-alias-normalize | Wrong argument names (`filename`/`file` → `path`, `text`/`body` → `content`), a missing path derived from a markdown title, and invented absolute paths (`/memory/x`) remapped into the workspace. |
 | 09 | compaction-safeguard | Tool-heavy conversations could never be compacted (the safeguard didn't recognize tool roles), so long sessions hit the context wall. |
 | 10 | webfetch-maxchars | `web_fetch` returned up to 50k characters (~12.5k tokens); 3-4 fetches filled a 32-45k context. Lowered to 30k. |
+| 11 | controlui-hide-working-output | the dashboard chat shows raw tool output (whole web pages as JSON) by default; this makes it hidden by default. The dashboard's own toolbar button (brain icon) turns it back on. Edits `dist/control-ui`. |
 
 Order matters: 02-07 extend the parser that 01 installs.
 

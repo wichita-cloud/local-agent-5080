@@ -54,9 +54,10 @@ published API and was tested against a stand-in service; test it with your own k
    before you rely on it**, and set a usage limit in the dashboard so you can never be charged beyond the credit.
 3. Create an API key in the dashboard (*API Keys*) and paste it in the tab, or add `BRAVE_API_KEY=your-key` to `config/secrets.env`. Only you can read that file.
 
-Only Brave also switches on the **agent's own** `web_search` tool in daytime chats: the OpenClaw version this release pins supports Brave,
-Perplexity, Gemini, Grok and Kimi for that, not Tavily or SearXNG (newer OpenClaw versions add SearXNG). Without a Brave key the agent can still
-read any page you give it a link to.
+**The agent's own web search (in your daytime chats) uses the same choice.** With a Brave key it uses Brave. Without one, if SearXNG is running
+(`bin/searxng.sh up`), the agent's `web_search` tool uses it through a small local service (`services/search_shim.py`, 127.0.0.1 only), so
+"search for the latest ..." works with no account and no card. Tavily is used by the overnight job only. With none of these the agent can
+still read any page you give it a link to. Your search words go to the public search engines SearXNG asks (the local search service does not log them).
 
 ## Settings (the Overnight tab, or `config/stack.env`)
 | Setting | Default | Meaning |

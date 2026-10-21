@@ -28,8 +28,8 @@ Start with `bin/verify.sh` and fix the **lowest** failing layer first.
 |---|---|---|
 | Tool call appears as text in the chat, nothing runs | `patches/openclaw-2026.3.11/apply.sh --check` | re-apply, then `bin/gateway-up.sh` (reinstalling OpenClaw removes patches) |
 | `EACCES … mkdir '/memory'` or `/workspace` | model invented an absolute path | patch 08 remaps these; check it's applied |
-| (overnight job) "no web search is set up" | docs/OVERNIGHT.md | set up SearXNG (`bin/searxng.sh up`, no account) or paste a Tavily key; the agent's own `web_search` still needs Brave |
-| web_search "missing_brave_api_key" | `config/secrets.env` BRAVE_API_KEY | get a key (docs/OVERNIGHT.md, "Getting a Brave Search API key"), set it, then `bin/gateway-up.sh` (or paste it in the Overnight tab) |
+| (overnight job) "no web search is set up" | docs/OVERNIGHT.md | set up SearXNG (`bin/searxng.sh up`, no account) or paste a Tavily key; the agent's own `web_search` then uses SearXNG too |
+| the agent says it can't search the web, or "missing_brave_api_key" | `config/secrets.env` BRAVE_API_KEY | get a key (docs/OVERNIGHT.md, "Getting a Brave Search API key"), set it, then `bin/gateway-up.sh` (or paste it in the Overnight tab) |
 | web_search HTTP 402 | Brave plan quota used up | not a bug; check your Brave dashboard |
 | Research fills the context after 2-3 fetches | patch 10 present? | apply it |
 | Agent never sees a long instruction file's tail | `bootstrapMaxChars` < file size | raise BOOTSTRAP_MAX_CHARS, `bin/gateway-up.sh` |

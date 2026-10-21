@@ -82,8 +82,8 @@ Only one, and it's optional. There are no cloud model keys and no subscription.
 
 | Service | Account? | Used for |
 |---|---|---|
-| **Search for the overnight job** | **optional** | no-account SearXNG on this PC, or a Tavily key (email sign-up, no card, 1,000 free searches a month); details in [docs/OVERNIGHT.md](docs/OVERNIGHT.md) |
-| **Brave Search API** | **optional** | the agent's web search. At the time of writing, the Search plan includes $5 of free credit a month (about 1,000 searches) and asks for a card to prevent abuse; check the current terms at [brave.com/search/api](https://brave.com/search/api/). Without a key the agent can still read any page you give it a link to |
+| **Web search** (the agent's own, and the overnight job) | **optional** | no-account SearXNG on this PC (`bin/searxng.sh up`, or say yes in the installer): the agent can search the web with no account and no card. The overnight job can also use a Tavily key (email sign-up, no card, 1,000 free searches a month). Details in [docs/OVERNIGHT.md](docs/OVERNIGHT.md) |
+| **Brave Search API** | **optional** | an alternative for the agent's web search. At the time of writing, the Search plan includes $5 of free credit a month (about 1,000 searches) and asks for a card to prevent abuse; check the current terms at [brave.com/search/api](https://brave.com/search/api/). Without a key the agent can still read any page you give it a link to |
 | Hugging Face | no | model downloads are public files |
 | GitHub | no | cloning is anonymous |
 | Docker Desktop | no (sign-in optional) | free for personal use and small businesses (under 250 employees and under $10M revenue); larger companies need a paid plan |
