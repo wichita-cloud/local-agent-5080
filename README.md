@@ -157,6 +157,7 @@ knowledge base, plus exactly where your data lives and what (if anything) goes o
 | Change its personality | Character tab | edit the files in `~/.openclaw/workspace/` |
 | Play a game | **Game Mode** → Win+P (graphics card's screen only) → monitor input to DisplayPort. Afterwards: Win+P (motherboard's screen only) → input to HDMI → **Restore Agent** | `bin/gpu-release.sh` … `bin/gpu-restore.sh` |
 | Bring everything back after a reboot | Health → Bring everything up | `bin/up.sh` (starts Docker Desktop if needed, then every layer, then verifies) |
+| Have it start by itself when you sign in to Windows | | `windows\Autostart.ps1 -Install` in PowerShell (`-DryRun` shows what it adds; `-Remove` undoes it). Details: [docs/STABILITY.md](docs/STABILITY.md) |
 
 ---
 

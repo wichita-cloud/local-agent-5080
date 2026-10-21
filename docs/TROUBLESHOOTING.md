@@ -72,3 +72,5 @@ Start with `bin/verify.sh` and fix the **lowest** failing layer first.
 | "refused: ... whole Windows user profile / credentials / system folders" when sharing | by design | share a specific project folder inside it |
 | Changed a sandbox setting but nothing changed | `docker ps` shows an old `openclaw-sbx-*` container | `bin/gateway-up.sh` replaces it; or `docker rm -f` the container and ask the agent something |
 | Want the old behaviour (agent works directly on the PC) | `bin/security.sh status` | `bin/security.sh set standard` (read docs/SECURITY.md first) |
+| "Config invalid" from OpenClaw, gateway won't start | `~/.openclaw/openclaw.json` damaged | `bin/gateway-up.sh` repairs it from OpenClaw's backups and keeps the damaged copy as `openclaw.json.broken-<date>` |
+| "another bin/up.sh is already running" | a start-up is already in progress | wait a few minutes for it to finish (it can take a while to load the model) |

@@ -90,6 +90,29 @@ Spilled memory doesn't move back on its own. The model must be restarted after V
 - **cron must run.** WSL doesn't start it by itself; `install.sh` adds it to `/etc/wsl.conf`. Without cron, no guard runs and
   nothing self-heals, while everything *looks* configured.
 
+## What repairs itself (broken on purpose, then timed)
+These were each tested on a clean install by killing the part and waiting; times are from the kill to healthy again. A once-a-minute
+watchdog (`guards/services-watchdog.sh`, cron) does the repairs and gives up after 3 failed tries in an hour rather than looping.
+
+| What breaks | What happens | Measured |
+|---|---|---|
+| A service is killed (memory, memory proxy, ready gate, console, search service) | the watchdog restarts it | 3 s to 66 s (the memory service reloads its model, so it is the slowest) |
+| The gateway is killed | the watchdog restarts it | 21 s |
+| A service hangs (port open, nothing answering) | probed on the next tick, then killed and restarted | about 2.5 min |
+| The SearXNG container is stopped or killed by hand | the watchdog starts it again (Docker's own restart policy ignores a manual stop); the agent's web search keeps pointing at it | 28 s |
+| The whole Ubuntu is stopped (`wsl --terminate`, or a WSL restart) | cron starts at boot and the watchdog brings every service back; the model and SearXNG stay up because Docker keeps them | about 85 s, with nobody typing |
+| OpenClaw's settings file is damaged | `bin/gateway-up.sh` keeps the damaged file, restores OpenClaw's newest valid backup, or rebuilds from `config/stack.env` if there is none | seconds |
+| Two `bin/up.sh` at once | the second stops with a message instead of fighting over the GPU | immediate |
+| Logs grow for months | `guards/trim-logs.sh` (daily) cuts any log over 5 MB to its newest 1 MB; Docker keeps at most 3 x 20 MB of the model's log | daily |
+| You update (`git pull`, then `bin/install.sh`) | your answers and settings are kept, new guard jobs are added, nothing is asked again | about 5 s |
+
+**Not automatic: a Windows restart.** WSL does not start by itself, so after Windows restarts nothing runs until you open Ubuntu
+and run `bin/up.sh`. To have it done at sign-in, run `windows\Autostart.ps1 -Install` once (add `-DryRun` first to see exactly what it
+adds; `-Remove` undoes it). It starts the model, so it takes the GPU at sign-in; use Game Mode when you want the GPU back.
+
+**The model is never restarted by the watchdog.** A stopped model may be deliberate (Game Mode), and starting it into a full GPU makes
+it spill (see above). Restart it with `bin/up.sh`.
+
 ## When you need more headroom
 In order of cost:
 1. Drop context: 32k → 24k frees ~270 MB.
