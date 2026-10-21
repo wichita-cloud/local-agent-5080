@@ -23,6 +23,25 @@ flock -w 180 8 || die "another gateway-up is still running"
 
 oc() { openclaw config set "$@" >/dev/null 2>&1 || warn "config set failed: $*"; }
 
+# A damaged OpenClaw settings file (a power cut mid-write, a bad hand edit) leaves OpenClaw saying "Config invalid" and the
+# gateway down, with nothing the watchdog can do. Repair it here: keep the broken file, put back the newest backup OpenClaw
+# itself keeps (openclaw.json.bak, .bak.1, ...) that reads cleanly, and only if none does, start from an empty file, which the
+# lines below then fill in from config/stack.env. Anything you had set by hand (a chat app, say) is in the kept copy.
+OCF="$HOME/.openclaw/openclaw.json"
+if [ -f "$OCF" ] && openclaw config get gateway.port 2>&1 | grep -q -i 'config invalid'; then
+  warn "OpenClaw's settings file is damaged; repairing"
+  keep="$OCF.broken-$(date -u +%Y%m%d-%H%M%S)"; cp "$OCF" "$keep"; fixed=""
+  for cand in "$OCF.bak" "$OCF".bak.[0-9]*; do
+    [ -f "$cand" ] || continue
+    cp "$cand" "$OCF"
+    if ! openclaw config get gateway.port 2>&1 | grep -q -i 'config invalid'; then fixed="$cand"; break; fi
+  done
+  if [ -n "$fixed" ]; then ok "restored OpenClaw's settings from $(basename "$fixed"); the damaged file is kept as $(basename "$keep")"
+  else
+    rm -f "$OCF"; warn "no usable backup: starting OpenClaw's settings from scratch (they are rebuilt below from config/stack.env). The damaged file is kept as $(basename "$keep")"
+  fi
+fi
+
 log "configuring OpenClaw for profile $PROFILE (context $CTX)"
 # What llama reports it serves (/props), so the claim follows the running server; the profile is the fallback.
 vis=$(curl -s -m 5 "http://127.0.0.1:$LLAMA_PORT/props" 2>/dev/null | python3 -c   'import sys,json; print("yes" if json.load(sys.stdin).get("modalities",{}).get("vision") else "no")' 2>/dev/null)
