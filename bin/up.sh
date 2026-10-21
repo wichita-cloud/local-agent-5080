@@ -28,8 +28,12 @@ else "$REPO/bin/llama-up.sh" || die "model failed to start (see above)"; fi
 
 log "4/6 services";  "$REPO/bin/services-up.sh" || warn "a service did not start (see above)"
 log "5/6 gateway"
-if [ "$(curl -s -o /dev/null -w '%{http_code}' -m 5 "http://127.0.0.1:$GATEWAY_PORT/")" = 200 ]; then ok "gateway already up"
-else "$REPO/bin/gateway-up.sh" || warn "gateway did not start"; fi
+# The installer starts the gateway before it asks about security, so an already-running gateway can still be on the old
+# settings. If the profile says Protected but the sandbox isn't on, re-apply (gateway-up.sh is safe to run again).
+sbx_drift=0
+if [ "${SECURITY_PROFILE:-standard}" = protected ] && [ "$(openclaw config get agents.defaults.sandbox.mode 2>/dev/null | tr -d '"[:space:]')" != all ]; then sbx_drift=1; fi
+if [ "$sbx_drift" = 0 ] && [ "$(curl -s -o /dev/null -w '%{http_code}' -m 5 "http://127.0.0.1:$GATEWAY_PORT/")" = 200 ]; then ok "gateway already up"
+else [ "$sbx_drift" = 1 ] && log "applying the Protected sandbox settings"; "$REPO/bin/gateway-up.sh" || warn "gateway did not start"; fi
 
 log "6/6 verify"
 "$REPO/bin/bench.sh" --quick

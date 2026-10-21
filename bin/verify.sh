@@ -101,7 +101,9 @@ fi
 if [ "${OVERNIGHT:-off}" = on ]; then
   if crontab -l 2>/dev/null | grep -q "$REPO/guards/overnight-tick.sh"; then pass "overnight work: on (${OVERNIGHT_START:-01:00}-${OVERNIGHT_END:-06:00}), cron check installed"
   else fail "overnight work is on but its 10-minute cron check is missing"; hint "bin/overnight.sh enable-cron"; fi
-  [ -n "${BRAVE_API_KEY:-}" ] || warn "overnight work has no search key (BRAVE_API_KEY): ideas will come from your notes only. Not counted"
+  if [ -z "${BRAVE_API_KEY:-}${TAVILY_API_KEY:-}" ] && [ -z "$(docker ps -q --filter name=local-agent-searxng 2>/dev/null)" ]; then
+    warn "overnight work has no web search set up (SearXNG, Tavily or Brave): ideas will come from your notes only. Not counted"
+  fi
 fi
 
 layer "6 GPU memory (the silent 6x slowdown)"
