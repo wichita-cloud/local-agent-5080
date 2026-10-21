@@ -25,7 +25,7 @@ set -a; . "$_cfg"; set +a
 [ -f "$REPO/config/secrets.env" ] && { set -a; . "$REPO/config/secrets.env"; set +a; }
 # Defaults for settings added after the first release, so an older config/stack.env keeps working under `set -u`.
 export CONSOLE_PORT="${CONSOLE_PORT:-18800}" OPENCLAW_WORKSPACE="${OPENCLAW_WORKSPACE:-$HOME/.openclaw/workspace}"
-export VOICE_PORT="${VOICE_PORT:-8880}" VOICE_ENGINE="${VOICE_ENGINE:-nano}" VOICE_CPUSET="${VOICE_CPUSET:-8-15}"   SEARXNG_PORT="${SEARXNG_PORT:-18888}" SECURITY_PROFILE="${SECURITY_PROFILE:-standard}" SANDBOX_NETWORK="${SANDBOX_NETWORK:-off}" SHARED_FOLDERS="${SHARED_FOLDERS:-}" SANDBOX_IMAGE="${SANDBOX_IMAGE:-local-agent-sandbox:1}"   STT_PORT="${STT_PORT:-8890}" STT_MODEL="${STT_MODEL:-small.en}" VOICE_NAME="${VOICE_NAME:-default}" VOICE_REPLIES="${VOICE_REPLIES:-inbound}"   VOICE_VENV="${VOICE_VENV:-$HOME/.local/share/local-agent/voice-venv}" VOICE_DIR="${VOICE_DIR:-$HOME/.local/share/local-agent/voices}"
+export VOICE_PORT="${VOICE_PORT:-8880}" VOICE_ENGINE="${VOICE_ENGINE:-nano}" VOICE_CPUSET="${VOICE_CPUSET:-8-15}"   SEARXNG_PORT="${SEARXNG_PORT:-18888}" SEARCH_SHIM_PORT="${SEARCH_SHIM_PORT:-18890}" SECURITY_PROFILE="${SECURITY_PROFILE:-standard}" SANDBOX_NETWORK="${SANDBOX_NETWORK:-off}" SHARED_FOLDERS="${SHARED_FOLDERS:-}" SANDBOX_IMAGE="${SANDBOX_IMAGE:-local-agent-sandbox:1}"   STT_PORT="${STT_PORT:-8890}" STT_MODEL="${STT_MODEL:-small.en}" VOICE_NAME="${VOICE_NAME:-default}" VOICE_REPLIES="${VOICE_REPLIES:-inbound}"   VOICE_VENV="${VOICE_VENV:-$HOME/.local/share/local-agent/voice-venv}" VOICE_DIR="${VOICE_DIR:-$HOME/.local/share/local-agent/voices}"
 
 # No usage statistics from any component: ChromaDB (memory), Hugging Face libraries, Gradio (pulled in by the voice
 # add-on), and anything honouring the DO_NOT_TRACK convention. This stack only goes online for what you ask it to do.
@@ -76,6 +76,17 @@ die()  { printf '  %sFAIL%s  %s\n' "$C_R" "$C_0" "$*" >&2; exit 1; }
 tslog() { local f=$1; shift; echo "[$(date '+%F %T')] $*" >> "$f"; }   # tslog <file> <msg>
 
 # ── probes ───────────────────────────────────────────────────────────────────────
+# Which search the agent's own web_search tool should use: brave (you have a key), searxng (the local container is running,
+# reached through services/search_shim.py), or none. search_have reads what OpenClaw is configured to do right now.
+search_wanted() {
+  if [ -n "${BRAVE_API_KEY:-}" ]; then echo brave
+  elif [ -n "$(docker ps -q --filter name=local-agent-searxng 2>/dev/null)" ]; then echo searxng
+  else echo none; fi
+}
+search_have() {
+  [ "$(openclaw config get tools.web.search.enabled 2>/dev/null | tr -d '"[:space:]')" = true ] || { echo none; return; }
+  case "$(openclaw config get tools.web.search.provider 2>/dev/null | tr -d '"[:space:]')" in brave) echo brave;; perplexity) echo searxng;; *) echo other;; esac
+}
 port_listening() { ss -tln 2>/dev/null | grep -qE "[:.]$1\b"; }
 # PID that owns a listening port. Use this, NOT `pgrep -f <script>`: pgrep -f also matches the shell that is
 # running the search (its own command line contains the pattern), so `pkill -f` can kill your own shell.

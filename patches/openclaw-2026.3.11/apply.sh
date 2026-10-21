@@ -31,9 +31,10 @@ TEXT_TOOLCALL_NESTED_UNWRAP_V1|1|06-text-toolcall-nested-unwrap.py
 TEXT_TOOLCALL_JSON_PATH_ARRAY_V1|1|07-text-toolcall-json-path-array.py
 ALIAS_NORMALIZE_PATCH_V4|4|08-param-alias-normalize.py
 COMPACTION_SAFEGUARD_PATCH|3|09-compaction-safeguard.py
-WEB_FETCH_MAXCHARS_PATCH_V1|4|10-webfetch-maxchars.py"
+WEB_FETCH_MAXCHARS_PATCH_V1|4|10-webfetch-maxchars.py
+LOCAL_AGENT_CONTROLUI_HIDE_WORKING_V1|1|11-controlui-hide-working-output.py"
 
-count() { grep -l "$1" "$OPENCLAW_DIST"/*.js 2>/dev/null | wc -l; }
+count() { grep -l "$1" "$OPENCLAW_DIST"/*.js "$OPENCLAW_DIST"/control-ui/assets/index-*.js 2>/dev/null | wc -l; }
 
 if [ "${1:-}" != "--check" ]; then
   echo "applying patches to $OPENCLAW_DIST"

@@ -26,7 +26,7 @@ setkey() { sed -i "/^$1=/d" "$CFG"; printf '%s="%s"\n' "$1" "$2" >> "$CFG"; }
 moved=""
 used=" "
 taken() { port_listening "$1" && return 0; case "$used" in *" $1 "*) return 0;; esac; return 1; }
-for k in LLAMA_PORT SHIM_PORT RAG_PORT MEMORY_PORT GATEWAY_PORT CONSOLE_PORT VOICE_PORT STT_PORT SEARXNG_PORT; do
+for k in LLAMA_PORT SHIM_PORT RAG_PORT MEMORY_PORT GATEWAY_PORT CONSOLE_PORT VOICE_PORT STT_PORT SEARXNG_PORT SEARCH_SHIM_PORT; do
   p="${!k:-}"; [ -n "$p" ] || continue
   if taken "$p"; then
     n=$p

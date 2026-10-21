@@ -32,8 +32,9 @@ log "5/6 gateway"
 # settings. If the profile says Protected but the sandbox isn't on, re-apply (gateway-up.sh is safe to run again).
 sbx_drift=0
 if [ "${SECURITY_PROFILE:-standard}" = protected ] && [ "$(openclaw config get agents.defaults.sandbox.mode 2>/dev/null | tr -d '"[:space:]')" != all ]; then sbx_drift=1; fi
+[ "$(search_have)" = "$(search_wanted)" ] || sbx_drift=1      # the agent's web search should follow Brave key / SearXNG
 if [ "$sbx_drift" = 0 ] && [ "$(curl -s -o /dev/null -w '%{http_code}' -m 5 "http://127.0.0.1:$GATEWAY_PORT/")" = 200 ]; then ok "gateway already up"
-else [ "$sbx_drift" = 1 ] && log "applying the Protected sandbox settings"; "$REPO/bin/gateway-up.sh" || warn "gateway did not start"; fi
+else [ "$sbx_drift" = 1 ] && log "applying the current security and web-search settings"; "$REPO/bin/gateway-up.sh" || warn "gateway did not start"; fi
 
 log "6/6 verify"
 "$REPO/bin/bench.sh" --quick

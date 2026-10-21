@@ -27,6 +27,8 @@ jobs:
         run: python3 -m py_compile services/*.py console/server.py bin/mtp-graft.py patches/openclaw-*/*.py
       - name: overnight job logic (time window, private-address guard, JSON recovery)
         run: STATE_DIR=/tmp/ov python3 services/overnight.py selftest
+      - name: agent web-search shim (recency words, result format)
+        run: python3 services/search_shim.py selftest
 
   memory-service-packages:
     # bin/install.sh step 4, on the Ubuntu this was built on (22.04) and the next one (24.04, Python 3.12)

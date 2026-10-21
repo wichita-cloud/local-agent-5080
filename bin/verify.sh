@@ -101,6 +101,10 @@ else
   warn "security: Standard profile: the agent runs commands directly on this PC, which can reach your Windows drives. bin/security.sh set protected puts it in a sandbox (docs/SECURITY.md). Not counted"
 fi
 
+if [ "$(search_wanted)" = searxng ]; then
+  if curl -s -m 5 "http://127.0.0.1:$SEARCH_SHIM_PORT/health" 2>/dev/null | grep -q '"searxng": *true'; then pass "agent web search (SearXNG via :$SEARCH_SHIM_PORT)"
+  else caution "agent web search: the SearXNG search service isn't answering (:$SEARCH_SHIM_PORT)" "the agent cannot search the web, but it can still read links you give it"; hint "bin/searxng.sh status; bin/services-up.sh"; fi
+fi
 if [ "${OVERNIGHT:-off}" = on ]; then
   if crontab -l 2>/dev/null | grep -q "$REPO/guards/overnight-tick.sh"; then pass "overnight work: on (${OVERNIGHT_START:-01:00}-${OVERNIGHT_END:-06:00}), cron check installed"
   else caution "overnight work is on but its 10-minute cron check is missing" "overnight research will not run"; hint "bin/overnight.sh enable-cron"; fi

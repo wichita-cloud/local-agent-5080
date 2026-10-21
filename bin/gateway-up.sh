@@ -38,8 +38,17 @@ oc agents.defaults.model "ollama/$MODEL_ALIAS"
 oc agents.defaults.bootstrapMaxChars "$BOOTSTRAP_MAX_CHARS"
 [ -n "${USER_TIMEZONE:-}" ] && oc agents.defaults.userTimezone "$USER_TIMEZONE"
 oc tools.web.fetch.enabled true
-if [ -n "${BRAVE_API_KEY:-}" ]; then oc tools.web.search.enabled true; oc tools.web.search.provider brave
-else oc tools.web.search.enabled false; fi
+# The agent's web_search: Brave if you gave a key; otherwise the local SearXNG container (no account, no card) through
+# services/search_shim.py, using OpenClaw's Perplexity mode with our own address; otherwise off (it can still read links).
+case "$(search_wanted)" in
+  brave) oc tools.web.search.enabled true; oc tools.web.search.provider brave ;;
+  searxng)
+    oc tools.web.search.enabled true; oc tools.web.search.provider perplexity
+    oc tools.web.search.perplexity.baseUrl "http://127.0.0.1:$SEARCH_SHIM_PORT/v1"
+    oc tools.web.search.perplexity.apiKey local-searxng
+    oc tools.web.search.perplexity.model searxng ;;
+  *) oc tools.web.search.enabled false ;;
+esac
 # Spoken replies: always the LOCAL voice server (services/voice_server.py), never OpenClaw's default "edge" provider,
 # which sends the text to an online Microsoft service. Without the voice add-on, spoken replies are off.
 # OpenClaw accepts any voice name for a custom OpenAI-style baseUrl. Its 30 s default timeout is too short for CPU speech;

@@ -28,6 +28,12 @@ try: print(len(json.load(sys.stdin).get("results", [])))
 except Exception: print(-1)'
 }
 
+# the agent's own web_search follows this container: start/stop its shim and re-apply OpenClaw's settings if they changed
+sync_agent() {
+  "$REPO/bin/services-up.sh" >/dev/null 2>&1 || true
+  [ "$(search_have)" = "$(search_wanted)" ] || { [ -x "$REPO/bin/gateway-up.sh" ] && "$REPO/bin/gateway-up.sh" >/dev/null 2>&1 && ok "the agent's web search now uses this (restarted the gateway)" || warn "couldn't update the agent's web search; run bin/gateway-up.sh"; }
+}
+
 cmd="${1:-status}"; shift || true
 case "$cmd" in
   up)
@@ -46,9 +52,11 @@ case "$cmd" in
         --cap-drop ALL --security-opt no-new-privileges --memory 512m --pids-limit 200 "$IMAGE" >/dev/null || die "couldn't start the container (is port $SEARXNG_PORT taken? set SEARXNG_PORT in config/stack.env)"
     else ok "already running"; fi
     for _ in $(seq 1 30); do n=$(search_count "weather forecast"); [ "$n" -gt 0 ] && break; sleep 2; done
-    [ "${n:-0}" -gt 0 ] && ok "SearXNG answers: a test search returned $n results" || die "it started but a test search returned nothing yet (docker logs $NAME). Try again in a minute: the search engines may be slow to answer" ;;
+    [ "${n:-0}" -gt 0 ] && ok "SearXNG answers: a test search returned $n results" || die "it started but a test search returned nothing yet (docker logs $NAME). Try again in a minute: the search engines may be slow to answer"; sync_agent ;;
   down)
-    docker rm -f "$NAME" >/dev/null 2>&1 && ok "SearXNG stopped and removed" || ok "it wasn't running" ;;
+    docker rm -f "$NAME" >/dev/null 2>&1 && ok "SearXNG stopped and removed" || ok "it wasn't running"
+    sp=$(port_pid "$SEARCH_SHIM_PORT"); [ -n "$sp" ] && kill "$sp" 2>/dev/null
+    sync_agent ;;
   status)
     if [ "$(docker inspect -f '{{.State.Running}}' "$NAME" 2>/dev/null)" = true ]; then
       n=$(search_count "weather forecast"); [ "$n" -gt 0 ] && ok "running on :$SEARXNG_PORT; a test search returned $n results" || warn "running, but a test search returned nothing (engines throttling this PC?)"

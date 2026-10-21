@@ -48,6 +48,10 @@ else
   for _ in $(seq 1 10); do port_listening "$SHIM_PORT" && break; sleep 1; done
   port_listening "$SHIM_PORT" && ok "ready-proxy listening" || { warn "ready-proxy did not start"; rc=1; }
 fi
+# the agent's web_search through the local SearXNG (only when that container is running; see bin/searxng.sh)
+if [ "$(search_wanted)" = searxng ]; then
+  start_svc search-shim "$SEARCH_SHIM_PORT" search_shim.py "http://127.0.0.1:$SEARCH_SHIM_PORT/health" 15 || rc=1
+fi
 # optional voice (bin/voice-install.sh): its own venv, pinned to VOICE_CPUSET so speech never competes with llama.
 # Only waits for the port, not the model load (~20 s; bin/voice.sh wait), so a reboot doesn't stall the other services.
 if [ -f "$VOICE_VENV/.installed" ]; then
