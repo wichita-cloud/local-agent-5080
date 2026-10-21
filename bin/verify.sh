@@ -164,7 +164,7 @@ done
 if [ -n "$stuck" ]; then caution "watchdog gave up restarting:$stuck (3+ failed restarts in the last hour)" "that part stays down until you restart it"; hint "tail $STATE_DIR/watchdog.log and that service's log in $STATE_DIR"
 else pass "no repair loop stuck"; fi
 
-printf '\n  %d passed, %d warnings, %d failed\n' "$P" "$W" "$F"
+printf '\n  %d passed, %d warning%s, %d failed\n' "$P" "$W" "$([ "$W" -eq 1 ] || echo s)" "$F"
 [ "$F" -gt 0 ] && echo "  FAIL = the agent cannot work. Fix the LOWEST failing layer first; upper-layer failures are usually symptoms."
 [ "$F" -eq 0 ] && [ "$W" -gt 0 ] && echo "  The agent works. Each WARN above says what could go wrong; fix them when convenient."
 [ "$F" -eq 0 ] && [ "$W" -eq 0 ] && echo "  All layers pass. If it still feels slow, run bin/bench.sh."

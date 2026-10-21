@@ -39,4 +39,21 @@ log "6/6 verify"
 "$REPO/bin/bench.sh" --quick
 # take the guard's first reading now (cron only does it every 5 minutes, and a fresh install would show a false "has not measured")
 "$REPO/guards/decode-floor.sh" >/dev/null 2>&1 || true
-"$REPO/bin/verify.sh"
+"$REPO/bin/verify.sh"; vrc=$?
+
+# the last thing a new user sees should say what to do next, not a check summary
+echo
+if [ "$vrc" -eq 0 ]; then printf '%s══ Ready ══%s\n' "$C_G" "$C_0"; else printf '%s══ Started, but something above failed (see the FAIL lines) ══%s\n' "$C_R" "$C_0"; fi
+cat <<TXT
+
+  1. Open a browser on Windows (Chrome or Edge) and go to this address to chat with your agent:
+
+       http://localhost:$GATEWAY_PORT/#token=${GATEWAY_TOKEN:-<see config/secrets.env>}
+
+  2. For setup (name and personality, models, voice, security, health), open the console:
+
+       http://localhost:$CONSOLE_PORT/
+
+  Everything runs on this PC. To start it again after a reboot, run:  bin/up.sh
+TXT
+exit "$vrc"
