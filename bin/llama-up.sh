@@ -60,6 +60,7 @@ fi
 # shellcheck disable=SC2086   # word-splitting of the *_ARGS strings is intended
 docker run -d --name "$LLAMA_CONTAINER" \
   --restart unless-stopped \
+  --log-driver json-file --log-opt max-size=20m --log-opt max-file=3 \
   --gpus all \
   --cpuset-cpus="$LLAMA_CPUSET" \
   -p "$LLAMA_PORT:$LLAMA_PORT" \

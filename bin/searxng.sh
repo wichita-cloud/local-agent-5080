@@ -48,12 +48,14 @@ case "$cmd" in
       docker rm -f "$NAME" >/dev/null 2>&1
       docker image inspect "$IMAGE" >/dev/null 2>&1 || { log "pulling the SearXNG image (~380 MB)"; docker pull -q "$IMAGE" >/dev/null || die "couldn't pull the SearXNG image (network?)"; }
       log "starting SearXNG on 127.0.0.1:$SEARXNG_PORT"
-      docker run -d --name "$NAME" --restart unless-stopped -p "127.0.0.1:$SEARXNG_PORT:8080" -v "$DIR/settings.yml:/etc/searxng/settings.yml:ro" \
+      docker run -d --name "$NAME" --restart unless-stopped --log-driver json-file --log-opt max-size=10m --log-opt max-file=2 -p "127.0.0.1:$SEARXNG_PORT:8080" -v "$DIR/settings.yml:/etc/searxng/settings.yml:ro" \
         --cap-drop ALL --security-opt no-new-privileges --memory 512m --pids-limit 200 "$IMAGE" >/dev/null || die "couldn't start the container (is port $SEARXNG_PORT taken? set SEARXNG_PORT in config/stack.env)"
     else ok "already running"; fi
     for _ in $(seq 1 30); do n=$(search_count "weather forecast"); [ "$n" -gt 0 ] && break; sleep 2; done
+    touch "$STATE_DIR/searxng.enabled"      # you turned it on: the watchdog keeps it running, and the agent's web search keeps pointing at it
     [ "${n:-0}" -gt 0 ] && ok "SearXNG answers: a test search returned $n results" || die "it started but a test search returned nothing yet (docker logs $NAME). Try again in a minute: the search engines may be slow to answer"; sync_agent ;;
   down)
+    rm -f "$STATE_DIR/searxng.enabled"
     docker rm -f "$NAME" >/dev/null 2>&1 && ok "SearXNG stopped and removed" || ok "it wasn't running"
     sp=$(port_pid "$SEARCH_SHIM_PORT"); [ -n "$sp" ] && kill "$sp" 2>/dev/null
     sync_agent ;;

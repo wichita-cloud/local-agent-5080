@@ -80,7 +80,7 @@ tslog() { local f=$1; shift; echo "[$(date '+%F %T')] $*" >> "$f"; }   # tslog <
 # reached through services/search_shim.py), or none. search_have reads what OpenClaw is configured to do right now.
 search_wanted() {
   if [ -n "${BRAVE_API_KEY:-}" ]; then echo brave
-  elif [ -n "$(docker ps -q --filter name=local-agent-searxng 2>/dev/null)" ]; then echo searxng
+  elif [ -f "$STATE_DIR/searxng.enabled" ] || [ -n "$(docker ps -q --filter name=local-agent-searxng 2>/dev/null)" ]; then echo searxng
   else echo none; fi
 }
 search_have() {

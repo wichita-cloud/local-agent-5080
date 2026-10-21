@@ -10,6 +10,11 @@ set -u
 . "$(dirname "$0")/lib.sh"
 load_profile || exit 1
 
+# One start-up at a time: two at once (a double click on "Bring everything up", plus a terminal) would each recreate the model
+# container and fight over the GPU. fd 9 is closed for every daemon this starts (7>&- 8>&- 9>&-), so the lock dies with this script.
+exec 9>"$STATE_DIR/up.lock"
+flock -n 9 || die "another bin/up.sh is already running; wait for it to finish (it can take a few minutes)"
+
 log "1/6 Docker"
 if ! docker_ok; then
   log "starting Docker Desktop"

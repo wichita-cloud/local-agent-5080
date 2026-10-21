@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# services-watchdog.sh (cron */1): restart a dead memory service, memory proxy, readiness gate, search service, console or gateway.
+# services-watchdog.sh (cron */1): restart a dead memory service, memory proxy, readiness gate, search service (and its SearXNG container), console or gateway.
 #
 # Never starts llama: a stopped model may be deliberate (game mode), and restarting it blind can land in a
 # full GPU and spill. Model restarts go through bin/llama-up.sh or bin/gpu-restore.sh, which check VRAM.
@@ -46,6 +46,15 @@ check ready-proxy    "$SHIM_PORT"    -                                        "$
 check console        "$CONSOLE_PORT" "http://127.0.0.1:$CONSOLE_PORT/"        "$REPO/bin/console-up.sh"
 [ -f "$VOICE_VENV/.installed" ] && check voice "$VOICE_PORT" "http://127.0.0.1:$VOICE_PORT/health" "$REPO/bin/services-up.sh"
 [ -f "$VOICE_VENV/.stt-installed" ] && check stt "$STT_PORT" "http://127.0.0.1:$STT_PORT/health" "$REPO/bin/services-up.sh"
+# SearXNG is a container (Docker's own restart policy ignores a container that was killed or stopped by hand): if you turned it on
+# and it is not running, start it again, with the same "3 failures in an hour, then stop trying" rule as the services.
+if [ -f "$STATE_DIR/searxng.enabled" ] && docker_ok && [ "$(docker inspect -f '{{.State.Running}}' local-agent-searxng 2>/dev/null)" != true ]; then
+  if stuck searxng; then tslog "$LOG" "STUCK: SearXNG is down, 3+ failed restarts in the last hour, not retrying (docker logs local-agent-searxng)"
+  else
+    tslog "$LOG" "SearXNG container is down, restarting"
+    "$REPO/bin/searxng.sh" up >>"$LOG" 2>&1 && tslog "$LOG" "  SearXNG back" || { tslog "$LOG" "  SearXNG restart FAILED"; date +%s >> "$STATE_DIR/watchdog.searxng.fails"; }
+  fi
+fi
 [ "$(search_wanted)" = searxng ] && check search-shim "$SEARCH_SHIM_PORT" "http://127.0.0.1:$SEARCH_SHIM_PORT/health" "$REPO/bin/services-up.sh"
 check gateway        "$GATEWAY_PORT" "http://127.0.0.1:$GATEWAY_PORT/health"  "$REPO/bin/gateway-up.sh"
 exit 0
