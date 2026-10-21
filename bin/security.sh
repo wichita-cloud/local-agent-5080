@@ -81,7 +81,7 @@ case "$cmd" in
     apply_now=1; [ "${1:-}" = "--no-apply" ] && apply_now=0
     cur=$(sed -n 's/^SECURITY_PROFILE=//p' "$CFG" | tr -d '"')   # what the file says (lib.sh defaults a missing key to standard)
     [ -n "$cur" ] || cur="${LOCAL_AGENT_SECURITY:-}"
-    if ! { [ -t 0 ] || { : </dev/tty; } 2>/dev/null; }; then   # no terminal to ask on (unattended install): honour SECURITY_PROFILE, else the safe default
+    if ! can_ask; then   # no terminal to ask on (unattended install): honour SECURITY_PROFILE, else the safe default
       [ -n "$cur" ] || cur=protected; setkey SECURITY_PROFILE "$cur"; ok "security profile: $cur (unattended; change it with bin/security.sh set ...)"
     else
       cat >/dev/tty <<'TXT'

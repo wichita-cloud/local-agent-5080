@@ -104,7 +104,7 @@ fi
 log "9/9 overnight research (optional, BETA)"
 if grep -q '^OVERNIGHT=' "$REPO/config/stack.env" 2>/dev/null; then
   ok "already chosen (OVERNIGHT=$(sed -n 's/^OVERNIGHT=//p' "$REPO/config/stack.env" | tr -d '"'))"
-elif [ -t 0 ] || { : </dev/tty; } 2>/dev/null; then
+elif can_ask; then
   cat >/dev/tty <<'TXT'
 
 Overnight research (BETA, optional): while you're away, the agent can use the idle GPU to research the projects in

@@ -87,6 +87,8 @@ search_have() {
   [ "$(openclaw config get tools.web.search.enabled 2>/dev/null | tr -d '"[:space:]')" = true ] || { echo none; return; }
   case "$(openclaw config get tools.web.search.provider 2>/dev/null | tr -d '"[:space:]')" in brave) echo brave;; perplexity) echo searxng;; *) echo other;; esac
 }
+# can_ask: is a person there to answer questions? LOCAL_AGENT_UNATTENDED=1 means never ask (the Windows installer sets it).
+can_ask() { [ -z "${LOCAL_AGENT_UNATTENDED:-}" ] && { [ -t 0 ] || { : </dev/tty; } 2>/dev/null; }; }
 port_listening() { ss -tln 2>/dev/null | grep -qE "[:.]$1\b"; }
 # PID that owns a listening port. Use this, NOT `pgrep -f <script>`: pgrep -f also matches the shell that is
 # running the search (its own command line contains the pattern), so `pkill -f` can kill your own shell.
