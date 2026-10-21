@@ -9,7 +9,7 @@
 #   6. default character files (only where none exist yet)
 #   7. guard cron entries
 #   8. security profile: asks how much of your PC the agent may touch (Protected sandbox is recommended)
-#   9. overnight research (optional, VERY BETA): asks whether to switch it on (default: no)
+#   9. overnight research (optional, BETA): asks whether to switch it on (default: no)
 # Docker Desktop, the NVIDIA driver and .wslconfig are Windows-side; see README step 0.
 set -u
 . "$(dirname "$0")/lib.sh"
@@ -101,13 +101,13 @@ else
   "$REPO/bin/security.sh" choose --no-apply || warn "security choice incomplete; run bin/security.sh choose"
 fi
 
-log "9/9 overnight research (optional, VERY BETA)"
+log "9/9 overnight research (optional, BETA)"
 if grep -q '^OVERNIGHT=' "$REPO/config/stack.env" 2>/dev/null; then
   ok "already chosen (OVERNIGHT=$(sed -n 's/^OVERNIGHT=//p' "$REPO/config/stack.env" | tr -d '"'))"
 elif [ -t 0 ] || { : </dev/tty; } 2>/dev/null; then
   cat >/dev/tty <<'TXT'
 
-Overnight research (VERY BETA, optional): while you're away, the agent can use the idle GPU to research the projects in
+Overnight research (BETA, optional): while you're away, the agent can use the idle GPU to research the projects in
 your notes and have a few ideas ready each morning. It only reads your notes and writes suggestions to a separate folder;
 nothing enters its memory unless you keep an idea. Web research needs a search option; there are ones that need no card (next question).
 You can switch it on or off any time in the console's Overnight tab.

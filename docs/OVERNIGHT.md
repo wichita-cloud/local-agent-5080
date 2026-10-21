@@ -1,6 +1,6 @@
 # Overnight work: put the GPU to use while you're away
 
-> **VERY BETA.** New, lightly tested, and off by default. It only *reads* your notes and writes suggestions to a separate folder, but expect rough edges and changes. It was tested with a stand-in search service and made-up notes, not yet with a real search key over many nights. Tell us what breaks (see the README's Contact section).
+> **BETA.** New, lightly tested, and off by default. It only *reads* your notes and writes suggestions to a separate folder, but expect rough edges and changes. It was tested with a stand-in search service and made-up notes, not yet with a real search key over many nights. Tell us what breaks (see the README's Contact section).
 
 Your RTX 5080 sits idle while you sleep. This optional job uses it to research what you're working on and have a few ideas
 ready in the morning. It's switched **off** by default; turn it on in the console's **Overnight** tab, or in `config/stack.env`.
@@ -61,7 +61,7 @@ read any page you give it a link to.
 ## Settings (the Overnight tab, or `config/stack.env`)
 | Setting | Default | Meaning |
 |---|---|---|
-| `OVERNIGHT` | `off` | `on` to enable (the installer asks once; very beta) |
+| `OVERNIGHT` | `off` | `on` to enable (the installer asks once; beta) |
 | `OVERNIGHT_START`, `OVERNIGHT_END` | `01:00`, `06:00` | the window in local 24-hour time; it may cross midnight (`23:00` to `06:00`); the job stops at the end |
 | `OVERNIGHT_IDLE_MINUTES` | `10` | wait until you haven't chatted with the agent for this long |
 | `OVERNIGHT_TOPICS` | empty | what to look into, in your own words (it also reads your notes) |
