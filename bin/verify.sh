@@ -8,13 +8,16 @@
 #   * identity, not liveness: :LLAMA_PORT must say it serves MODEL_ALIAS (a different container can answer there).
 #   * a guard's ALARM counts. A verifier that ignores the speed guard reports all green while the model runs 7x slow.
 #   * unknown ≠ ok: a check that cannot measure fails, with a message saying so.
-# Exit 0 = every check passed. Exit 1 = at least one FAIL.
+# FAIL means the agent cannot work (or answers wrongly). WARN means it works but something is off; each warning says
+# what could go wrong. Exit 0 = no FAIL (warnings don't change it). Exit 1 = at least one FAIL.
 set -u
 . "$(dirname "$0")/lib.sh"
 load_profile >/dev/null 2>&1 || true
-P=0; F=0
+P=0; F=0; W=0
 pass() { P=$((P+1)); ok "$*"; }
 fail() { F=$((F+1)); printf '  %sFAIL%s  %s\n' "$C_R" "$C_0" "$*"; }
+# caution <what is off> <what it could cause>: a WARN. The agent still works; the second argument says what to expect.
+caution() { W=$((W+1)); printf '  %sWARN%s  %s\n' "$C_Y" "$C_0" "$1"; [ -n "${2:-}" ] && printf '        what it means: %s\n' "$2"; }
 hint() { printf '        → %s\n' "$*"; }
 layer() { printf '\n%s── %s ──%s\n' "$C_C" "$*" "$C_0"; }
 
@@ -48,7 +51,7 @@ if [ -n "$srv_ctx" ] && [ "$srv_ctx" = "${CTX:-}" ] && [ "$srv_file" = "${MODEL_
 else fail "running config (-c ${srv_ctx:-?}, ${srv_file:-?}) ≠ profile ${PROFILE:-?} (-c ${CTX:-?}, ${MODEL_FILE:-?})"; hint "bin/model.sh use ${ACTIVE_MODEL}"; fi
 splits=$(docker logs "$LLAMA_CONTAINER" 2>&1 | grep -oE 'graph splits = [0-9]+' | tail -1 | grep -oE '[0-9]+$')
 if [ -n "$splits" ] && [ "$splits" -le 4 ]; then pass "graph splits = $splits (model fully on GPU)"
-else fail "graph splits = ${splits:-unknown} (expect ~2)"; hint "KV_ARGS must be q8_0/q8_0; check free VRAM; docs/TUNING.md"; fi
+else caution "graph splits = ${splits:-unknown} (expect ~2): part of the model is not on the GPU" "replies will be much slower than expected"; hint "KV_ARGS must be q8_0/q8_0; check free VRAM; docs/TUNING.md"; fi
 
 layer "4 Services"
 for s in "memory-service:$MEMORY_PORT:/health" "rag-proxy:$RAG_PORT:/health"; do
@@ -62,7 +65,7 @@ if [ -f "$VOICE_VENV/.installed" ]; then   # optional add-on: only checked when 
   case "$vs" in
     ok) pass "voice (:$VOICE_PORT, $VOICE_ENGINE, voice '$VOICE_NAME')" ;;
     loading) warn "voice (:$VOICE_PORT) still loading its model; check again in a minute. Not counted" ;;
-    *) fail "voice (:$VOICE_PORT) ${vs:-down}"; hint "tail $STATE_DIR/voice-server.log; bin/services-up.sh restarts it" ;;
+    *) caution "voice (:$VOICE_PORT) ${vs:-down}" "the agent will not speak its replies; typing and reading still work"; hint "tail $STATE_DIR/voice-server.log; bin/services-up.sh restarts it" ;;
   esac
 fi
 if [ -f "$VOICE_VENV/.stt-installed" ]; then   # speech-to-text half of the voice add-on
@@ -70,7 +73,7 @@ if [ -f "$VOICE_VENV/.stt-installed" ]; then   # speech-to-text half of the voic
   case "$ss" in
     ok) pass "speech-to-text (:$STT_PORT, model $STT_MODEL)" ;;
     loading) warn "speech-to-text (:$STT_PORT) still loading its model; check again in a minute. Not counted" ;;
-    *) fail "speech-to-text (:$STT_PORT) ${ss:-down}"; hint "tail $STATE_DIR/stt-server.log; bin/services-up.sh restarts it" ;;
+    *) caution "speech-to-text (:$STT_PORT) ${ss:-down}" "you cannot talk to the agent with a microphone; typing still works"; hint "tail $STATE_DIR/stt-server.log; bin/services-up.sh restarts it" ;;
   esac
 fi
 # end-to-end through the same chain the agent uses
@@ -87,20 +90,20 @@ if [ -n "$cw" ] && [ "$cw" = "${srv_ctx:-x}" ]; then pass "OpenClaw contextWindo
 else fail "OpenClaw contextWindow ${cw:-?} ≠ llama -c ${srv_ctx:-?}"; hint "bin/gateway-up.sh rewrites it from the profile"; fi
 if [ -x "$REPO/patches/openclaw-$OPENCLAW_VERSION/apply.sh" ]; then
   if "$REPO/patches/openclaw-$OPENCLAW_VERSION/apply.sh" --check >/dev/null 2>&1; then pass "OpenClaw patches present (marker counts as expected)"
-  else fail "OpenClaw patches missing or partial"; hint "patches/openclaw-$OPENCLAW_VERSION/apply.sh --check shows which; re-apply with sudo -E …/apply.sh"; fi
+  else caution "OpenClaw patches missing or partial" "the agent still runs, but some tool calls (reading web pages, editing files) may be less reliable"; hint "patches/openclaw-$OPENCLAW_VERSION/apply.sh --check shows which; re-apply with sudo -E …/apply.sh"; fi
 fi
 if [ "${SECURITY_PROFILE:-standard}" = protected ]; then
   smode=$(openclaw config get agents.defaults.sandbox.mode 2>/dev/null | tr -d '"[:space:]')
   elev=$(openclaw config get tools.elevated.enabled 2>/dev/null | tr -d '"[:space:]')
   if [ "$smode" = all ] && [ "$elev" = false ] && docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1; then pass "security: Protected (the agent's commands run in the sandbox; elevated off)"
-  else fail "security: profile is Protected but the sandbox isn't fully in place (mode=${smode:-?}, elevated=${elev:-?}, image $(docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1 && echo present || echo missing))"; hint "bin/security.sh set protected (builds the image and re-applies)"; fi
+  else caution "security: profile is Protected but the sandbox isn't fully in place (mode=${smode:-?}, elevated=${elev:-?}, image $(docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1 && echo present || echo missing))" "the agent's commands are NOT running in the sandbox right now; they run directly on this PC"; hint "bin/security.sh set protected (builds the image and re-applies)"; fi
 else
   warn "security: Standard profile: the agent runs commands directly on this PC, which can reach your Windows drives. bin/security.sh set protected puts it in a sandbox (docs/SECURITY.md). Not counted"
 fi
 
 if [ "${OVERNIGHT:-off}" = on ]; then
   if crontab -l 2>/dev/null | grep -q "$REPO/guards/overnight-tick.sh"; then pass "overnight work: on (${OVERNIGHT_START:-01:00}-${OVERNIGHT_END:-06:00}), cron check installed"
-  else fail "overnight work is on but its 10-minute cron check is missing"; hint "bin/overnight.sh enable-cron"; fi
+  else caution "overnight work is on but its 10-minute cron check is missing" "overnight research will not run"; hint "bin/overnight.sh enable-cron"; fi
   if [ -z "${BRAVE_API_KEY:-}${TAVILY_API_KEY:-}" ] && [ -z "$(docker ps -q --filter name=local-agent-searxng 2>/dev/null)" ]; then
     warn "overnight work has no web search set up (SearXNG, Tavily or Brave): ideas will come from your notes only. Not counted"
   fi
@@ -119,38 +122,38 @@ if command -v powershell.exe >/dev/null 2>&1; then
     0) pass "display is not on the NVIDIA GPU" ;;
     1) if [ "${vfree:-0}" -ge 1024 ]; then
          warn "the display is on the NVIDIA GPU, but ${vfree} MiB VRAM is still free: fine for this model. Not counted"
-       else fail "the display is on the NVIDIA GPU"; hint "Win+P: show the desktop only on the motherboard's screen (docs/STABILITY.md), or use a smaller model"; fi ;;
-    *) fail "could not read display adapter (gpu-check.ps1 failed)" ;;
+       else caution "the display is on the NVIDIA GPU" "less VRAM is left for the model, so replies can slow down about 6x if it spills"; hint "Win+P: show the desktop only on the motherboard's screen (docs/STABILITY.md), or use a smaller model"; fi ;;
+    *) caution "could not read display adapter (gpu-check.ps1 failed)" "a slowdown from the display using the GPU would not be detected" ;;
   esac
   # Shared memory alone is ambiguous: WSL keeps ~100-170 MiB there even when healthy. The driver only spills the
   # model into it when dedicated VRAM is full, so >1 GiB free VRAM means it isn't a spill (seen: 162 MiB, 8 GB free).
   if [ -n "$shr" ]; then
     if [ "$shr" -le "$SPILL_MAX_MIB" ]; then pass "model spill to system RAM: ${shr} MiB (limit $SPILL_MAX_MIB)"
     elif [ "${vfree:-0}" -ge 1024 ]; then pass "shared GPU memory ${shr} MiB, but ${vfree} MiB VRAM free: WSL's own, not a spill"
-    else fail "model has ${shr} MiB in SHARED system memory (spill): expect ~6x slower decode"
+    else caution "model has ${shr} MiB in SHARED system memory (spill)" "SLOW: replies will take about 6 times longer than they should"
          hint "free VRAM (close apps: ${others:-none listed}), then bin/llama-up.sh; confirm with bin/bench.sh"; fi
-  else fail "could not measure spill"; fi
+  else caution "could not measure spill" "a slowdown from GPU memory spill would not be detected"; fi
   [ -n "$others" ] && hint "other apps on the NVIDIA GPU: $others (windows/set-igpu-preference.ps1)"
-else fail "powershell.exe not reachable from WSL: cannot check display/spill"; fi
+else caution "powershell.exe not reachable from WSL: cannot check display/spill" "a slowdown from GPU memory spill would not be detected"; fi
 free=$(vram_free_mib)
-if [ -z "$free" ]; then fail "free VRAM unreadable"
+if [ -z "$free" ]; then caution "free VRAM unreadable" "a slowdown from running out of GPU memory would not be detected"
 elif [ "$free" -ge "$VRAM_FLOOR_MIB" ]; then pass "free VRAM ${free} MiB (floor $VRAM_FLOOR_MIB)"
-else fail "free VRAM ${free} MiB, below floor $VRAM_FLOOR_MIB"; hint "next allocation may spill; consider a smaller CTX profile (docs/STABILITY.md)"; fi
+else caution "free VRAM ${free} MiB, below floor $VRAM_FLOOR_MIB" "the next large request may overflow GPU memory and slow replies"; hint "next allocation may spill; consider a smaller CTX profile (docs/STABILITY.md)"; fi
 
 layer "7 Guards and scheduling"
-pgrep -x cron >/dev/null && pass "cron daemon running" || { fail "cron not running: nothing self-heals"; hint "sudo service cron start (install.sh adds it to /etc/wsl.conf [boot])"; }
+pgrep -x cron >/dev/null && pass "cron daemon running" || { caution "cron not running" "nothing restarts a crashed service and the safety guards will not run"; hint "sudo service cron start (install.sh adds it to /etc/wsl.conf [boot])"; }
 n=$(crontab -l 2>/dev/null | grep -c 'local-agent-5080\|guards/')
-[ "$n" -ge 2 ] && pass "$n guard entries in crontab" || { fail "guard cron entries missing"; hint "bin/install.sh installs guards/crontab.example"; }
-if [ -f "$STATE_DIR/decode-floor.ALARM" ]; then fail "decode/VRAM guard is ALARMING since $(cat "$STATE_DIR/decode-floor.ALARM")"; hint "tail $STATE_DIR/decode-floor.log, then run bin/bench.sh"
+[ "$n" -ge 2 ] && pass "$n guard entries in crontab" || { caution "guard cron entries missing" "crashed services are not restarted and slowdowns are not reported"; hint "bin/install.sh installs guards/crontab.example"; }
+if [ -f "$STATE_DIR/decode-floor.ALARM" ]; then caution "decode/VRAM guard is ALARMING since $(cat "$STATE_DIR/decode-floor.ALARM")" "replies are slower than expected"; hint "tail $STATE_DIR/decode-floor.log, then run bin/bench.sh"
 else pass "decode/VRAM guard not alarming"; fi
-[ -f "$STATE_DIR/decode-floor.MEASUREMENT-FAILURE" ] && { fail "decode guard cannot measure (instrument broken, not the model)"; hint "tail $STATE_DIR/decode-floor.log"; }
+[ -f "$STATE_DIR/decode-floor.MEASUREMENT-FAILURE" ] && { caution "decode guard cannot measure (the checker is broken, not the model)" "a slowdown would not be reported"; hint "tail $STATE_DIR/decode-floor.log"; }
 m="$STATE_DIR/decode-floor.last-vram"
 inst="$STATE_DIR/crontab.new"   # written by install.sh when it installs the guards
 if [ -f "$m" ] && [ $(( $(date +%s) - $(stat -c %Y "$m") )) -le 1800 ]; then pass "guard measured within 30 min"
 elif [ ! -f "$m" ] && [ -f "$inst" ] && [ $(( $(date +%s) - $(stat -c %Y "$inst") )) -le 900 ]; then
   warn "decode guard hasn't run yet (guards installed $(( ($(date +%s) - $(stat -c %Y "$inst")) / 60 )) min ago; it runs every 5 min). Not counted"
-else fail "decode guard has not measured in 30+ min (cron down or script broken)"; fi
-[ -f "$GAME_FLAG" ] && { fail "game mode is ON"; hint "bin/gpu-restore.sh"; }
+else caution "decode guard has not measured in 30+ min (cron down or script broken)" "a slowdown would not be reported"; fi
+[ -f "$GAME_FLAG" ] && { caution "game mode is ON" "the GPU is freed for gaming and the agent is offline until you restore it"; hint "bin/gpu-restore.sh"; }
 # A repair loop that keeps failing is a stuck state, not a retry. The watchdog stops after 3 failed restarts in an
 # hour and logs STUCK; without this check nobody would see that line.
 stuck=""
@@ -158,10 +161,11 @@ for f in "$STATE_DIR"/watchdog.*.fails; do
   [ -f "$f" ] || continue
   [ "$(awk -v c="$(( $(date +%s) - 3600 ))" '$1>=c' "$f" | wc -l)" -ge 3 ] && stuck="$stuck $(basename "$f" .fails | sed 's/^watchdog\.//')"
 done
-if [ -n "$stuck" ]; then fail "watchdog gave up restarting:$stuck (3+ failed restarts in the last hour)"; hint "tail $STATE_DIR/watchdog.log and that service's log in $STATE_DIR"
+if [ -n "$stuck" ]; then caution "watchdog gave up restarting:$stuck (3+ failed restarts in the last hour)" "that part stays down until you restart it"; hint "tail $STATE_DIR/watchdog.log and that service's log in $STATE_DIR"
 else pass "no repair loop stuck"; fi
 
-printf '\n  %d passed, %d failed\n' "$P" "$F"
-[ "$F" -gt 0 ] && echo "  Fix the LOWEST failing layer first. Upper-layer failures are usually symptoms."
-[ "$F" -eq 0 ] && echo "  All layers pass. If it still feels slow, run bin/bench.sh."
+printf '\n  %d passed, %d warnings, %d failed\n' "$P" "$W" "$F"
+[ "$F" -gt 0 ] && echo "  FAIL = the agent cannot work. Fix the LOWEST failing layer first; upper-layer failures are usually symptoms."
+[ "$F" -eq 0 ] && [ "$W" -gt 0 ] && echo "  The agent works. Each WARN above says what could go wrong; fix them when convenient."
+[ "$F" -eq 0 ] && [ "$W" -eq 0 ] && echo "  All layers pass. If it still feels slow, run bin/bench.sh."
 [ "$F" -eq 0 ]
