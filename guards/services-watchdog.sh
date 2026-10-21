@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# services-watchdog.sh (cron */1): restart a dead memory service, memory proxy, readiness gate, console or gateway.
+# services-watchdog.sh (cron */1): restart a dead memory service, memory proxy, readiness gate, search service, console or gateway.
 #
 # Never starts llama: a stopped model may be deliberate (game mode), and restarting it blind can land in a
 # full GPU and spill. Model restarts go through bin/llama-up.sh or bin/gpu-restore.sh, which check VRAM.
@@ -46,5 +46,6 @@ check ready-proxy    "$SHIM_PORT"    -                                        "$
 check console        "$CONSOLE_PORT" "http://127.0.0.1:$CONSOLE_PORT/"        "$REPO/bin/console-up.sh"
 [ -f "$VOICE_VENV/.installed" ] && check voice "$VOICE_PORT" "http://127.0.0.1:$VOICE_PORT/health" "$REPO/bin/services-up.sh"
 [ -f "$VOICE_VENV/.stt-installed" ] && check stt "$STT_PORT" "http://127.0.0.1:$STT_PORT/health" "$REPO/bin/services-up.sh"
+[ "$(search_wanted)" = searxng ] && check search-shim "$SEARCH_SHIM_PORT" "http://127.0.0.1:$SEARCH_SHIM_PORT/health" "$REPO/bin/services-up.sh"
 check gateway        "$GATEWAY_PORT" "http://127.0.0.1:$GATEWAY_PORT/health"  "$REPO/bin/gateway-up.sh"
 exit 0
