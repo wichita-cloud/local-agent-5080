@@ -101,6 +101,11 @@ Test it by asking the agent to "search the web for today's top science news".
    model. Gamers: keep a second cable from the 5080 to another input on the same monitor, and set Windows to show the
    desktop on one screen only (Win+P; see the trade-off note at the top). It is the single most important step; see [docs/STABILITY.md](docs/STABILITY.md) for why (it's a 6× speed difference).
    If the motherboard output shows nothing, enable the iGPU in the BIOS (often called "Integrated Graphics: Force/Enabled").
+   **No integrated graphics?** Some CPUs have none (for example many Intel "F" models and some AMD chips). Then the desktop has to
+   use the 5080, which costs about 0.5 GB of VRAM: pick the 14B or 8B model instead of the 27B (see [docs/STABILITY.md](docs/STABILITY.md)).
+   **Moving the cable is not enough on its own:** apps that already held the 5080 keep their GPU memory until they restart.
+   After moving the monitor, run `windows\set-igpu-preference.ps1` (a normal PowerShell; it keeps Chrome, Edge and WebView2 on the
+   integrated GPU), then close those apps or reboot. Check the result in step 4.
 2. Install the current **NVIDIA Game Ready or Studio driver**, **WSL2** (`wsl --install -d Ubuntu-22.04`) and
    **Docker Desktop** (Settings → Resources → WSL integration → enable for Ubuntu-22.04).
 3. Copy [`windows/wslconfig.example`](windows/wslconfig.example) to `%UserProfile%\.wslconfig`, then run `wsl --shutdown` once.
