@@ -107,7 +107,7 @@ Test it by asking the agent to "search the web for today's top science news".
    After moving the monitor, run `windows\set-igpu-preference.ps1` (a normal PowerShell; it keeps Chrome, Edge and WebView2 on the
    integrated GPU), then close those apps or reboot. Check the result in step 4.
 2. Install the current **NVIDIA Game Ready or Studio driver**, **WSL2** (`wsl --install -d Ubuntu-22.04`) and
-   **Docker Desktop** (Settings → Resources → WSL integration → enable for Ubuntu-22.04).
+   **Docker Desktop** (Settings → Resources → WSL integration → enable for Ubuntu-22.04, then Apply). Open a **new** Ubuntu window afterwards: a window that was already open can't use Docker yet.
 3. Copy [`windows/wslconfig.example`](windows/wslconfig.example) to `%UserProfile%\.wslconfig`, then run `wsl --shutdown` once.
 4. In an **admin PowerShell**, from the repo's `windows` folder, run `.\gpu-check.ps1`. It should report `display_on_nvidia=0`.
 
