@@ -29,7 +29,7 @@ setkey() {   # setkey KEY VALUE : replace or add KEY="VALUE" in config/stack.env
 docker_ok() { command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; }
 
 ensure_image() {
-  docker_ok || { warn "Docker isn't reachable from here, so the sandbox can't be built (Docker Desktop running? WSL integration on?)"; return 1; }
+  docker_ok || { warn "Docker isn't reachable from here, so the sandbox can't be built (Docker Desktop running? Open Docker Desktop > Settings > Resources > WSL integration, switch this Ubuntu on, then run the installer again)"; return 1; }
   docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1 && return 0
   log "building the sandbox image ($SANDBOX_IMAGE, ~330 MB, about a minute)"
   docker build -q -t "$SANDBOX_IMAGE" -f "$REPO/docker/sandbox.Dockerfile" "$REPO/docker" >/dev/null || { warn "sandbox image build failed (network?)"; return 1; }

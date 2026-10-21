@@ -135,4 +135,5 @@ else
 fi
 
 echo
-echo "Next: put your model in $MODEL_DIR (docs/MODELS.md), then:  bin/up.sh"
+if ls "$MODEL_DIR"/*.gguf >/dev/null 2>&1; then echo "Next: bin/up.sh  (your model is already in $MODEL_DIR)"
+else echo "Next: put your model in $MODEL_DIR (bin/model.sh download <name>, or docs/MODELS.md), then:  bin/up.sh"; fi
