@@ -37,4 +37,6 @@ else [ "$sbx_drift" = 1 ] && log "applying the Protected sandbox settings"; "$RE
 
 log "6/6 verify"
 "$REPO/bin/bench.sh" --quick
+# take the guard's first reading now (cron only does it every 5 minutes, and a fresh install would show a false "has not measured")
+"$REPO/guards/decode-floor.sh" >/dev/null 2>&1 || true
 "$REPO/bin/verify.sh"
