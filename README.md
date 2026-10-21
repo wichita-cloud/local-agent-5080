@@ -112,8 +112,12 @@ Test it by asking the agent to "search the web for today's top science news".
 4. In an **admin PowerShell**, from the repo's `windows` folder, run `.\gpu-check.ps1`. It should report `display_on_nvidia=0`.
 
 ### 1. Get the repo and the model (inside Ubuntu)
-Use **Windows Terminal** and open an **Ubuntu** tab (or run `wsl -d Ubuntu-22.04`, with nothing after the name). The old Command
-Prompt window can garble pasted blocks (stray `^[[200~` characters); if that happens, paste one line at a time.
+**Which window?** Open **Windows Terminal** (Start menu → "Terminal"), click the small down-arrow (⌄) next to the "+" tab button
+and pick **Ubuntu-22.04** (or open the "Ubuntu 22.04" app from the Start menu). Not Command Prompt or PowerShell: the old
+Command Prompt window can garble pasted blocks (stray `^[[200~` characters).
+**Check before you paste:** the prompt should look like `yourname@PCNAME:~$` (it ends in `$`; if it starts with `C:\` you are still in
+Windows: type `wsl` first). If you have more than one Ubuntu installed, type `whoami` and check it is the account you mean to install into.
+If pasted lines come out garbled, paste one line at a time.
 ```bash
 git clone https://github.com/wichita-cloud/local-agent-5080.git ~/local-agent-5080
 cd ~/local-agent-5080
