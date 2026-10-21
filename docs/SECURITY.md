@@ -32,7 +32,7 @@ your choice, made when you run `bin/install.sh` and changeable any time in the c
 
 What Protected does and doesn't protect. It limits the damage when the model makes a mistake or reads something malicious
 (a web page or document with hidden instructions): commands run in a container that has no access to your Windows drives
-or credentials, and no internet unless you allowed it. It is OpenClaw's own Docker sandbox, which its documentation calls
+or credentials, and the programs it runs have no internet unless you allowed it (web search and reading web pages still work: they run outside the box). It is OpenClaw's own Docker sandbox, which its documentation calls
 "not a perfect security boundary". It does not stop the agent from using what you gave it: anything in the workspace or in a
 shared folder can still be read, and (for read-and-change folders) changed or deleted; web fetch happens outside the sandbox, so
 text from inside the workspace could in principle be sent to a web address the agent is tricked into fetching. Share

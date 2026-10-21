@@ -104,7 +104,7 @@ case "$cmd" in
       fetch "$MODEL_URL" "$MODEL_FILE" "$MIN_BYTES"
     fi
     [ -n "${MMPROJ_URL:-}" ] && fetch "$MMPROJ_URL" "$MMPROJ_FILE" "${MMPROJ_MIN_BYTES:-1}"
-    ok "ready. Next: bin/model.sh use $new" ;;
+    ok "ready. Next: bin/install.sh (to run this model instead of the default, first run: bin/model.sh use $new)" ;;
   tune)
     # Adjust ONE profile's sampling, context or thinking. Writes config/tuning/<profile>.env with only what differs from
     # the shipped profile (models/ stays untouched), so each model keeps its own settings across switches. If the

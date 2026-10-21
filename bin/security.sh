@@ -91,8 +91,9 @@ How much of your PC should the agent be able to touch?
   mistake, the damage is limited to what it can reach.
 
   1) Protected (recommended)  Commands run in a sandbox that can only see the agent's own workspace and the folders
-                              you choose to share. No internet from inside it, and no access to your Windows drives,
-                              SSH keys or other files. Web research still works. You can share a folder any time.
+                              you choose to share. Web search and reading web pages still work; only programs the agent runs
+                              on your PC are cut off from the internet. No access to your Windows drives, SSH keys or
+                              other files. You can share a folder any time.
   2) Standard                 Commands run directly on your PC with your WSL account's access, including your Windows
                               drives. Simpler; nothing to set up; a bigger blast radius.
 

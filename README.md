@@ -66,7 +66,7 @@ measured on that one.
 | Switching models | one click in the console, or `bin/model.sh use <profile>`; nothing else needs editing |
 | Voice (optional add-on) | talk to the agent with the microphone (local speech-to-text) and hear it answer in a voice you choose or clone from a 10-30 s recording; all local, on spare CPU cores ([docs/VOICE.md](docs/VOICE.md)) |
 | Overnight work (optional, **very beta**) | while you're away, uses the idle GPU to research your project topics (web searches within a monthly budget you set; works with no account and no card) and have a few ideas ready each morning; you choose the hours and what to keep ([docs/OVERNIGHT.md](docs/OVERNIGHT.md)) |
-| Safer by default | at install you choose **Protected**: the agent's commands run in a Docker sandbox that sees only its own workspace and the folders you share, with no internet and no access to your Windows drives ([docs/SECURITY.md](docs/SECURITY.md)) |
+| Safer by default | at install you choose **Protected**: the agent's commands run in a Docker sandbox that sees only its own workspace and the folders you share, where programs it runs have no internet (web search and reading pages still work) and no access to your Windows drives ([docs/SECURITY.md](docs/SECURITY.md)) |
 | Fine-tuning (optional) | hidden under **Advanced** on each model: temperature and other sampling settings, context length, thinking. Each model keeps its own |
 | Your own character | the agent's name, personality and rules are plain Markdown files you edit in the console. It ships neutral |
 | Memory | Local BGE-M3 embeddings and a reranker on the CPU; relevant memories are added to each turn automatically |
@@ -112,6 +112,8 @@ Test it by asking the agent to "search the web for today's top science news".
 4. In an **admin PowerShell**, from the repo's `windows` folder, run `.\gpu-check.ps1`. It should report `display_on_nvidia=0`.
 
 ### 1. Get the repo and the model (inside Ubuntu)
+Use **Windows Terminal** and open an **Ubuntu** tab (or run `wsl -d Ubuntu-22.04`, with nothing after the name). The old Command
+Prompt window can garble pasted blocks (stray `^[[200~` characters); if that happens, paste one line at a time.
 ```bash
 git clone https://github.com/wichita-cloud/local-agent-5080.git ~/local-agent-5080
 cd ~/local-agent-5080
