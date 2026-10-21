@@ -15,6 +15,10 @@ set -u
 . "$(dirname "$0")/lib.sh"
 chmod +x "$REPO"/bin/*.sh "$REPO"/guards/*.sh "$REPO"/patches/*/apply.sh 2>/dev/null
 
+log "0/9 checking for conflicts (ports, an existing OpenClaw)"
+"$REPO/bin/preflight.sh" || exit 1
+set -a; . "$REPO/config/stack.env"; set +a      # preflight may have moved a port
+
 log "1/9 apt packages"
 need=""
 for p in curl git python3-venv python3-pip cron iproute2 ca-certificates; do dpkg -s "$p" >/dev/null 2>&1 || need="$need $p"; done
@@ -135,5 +139,6 @@ else
 fi
 
 echo
+touch "$STATE_DIR/install.complete"
 if ls "$MODEL_DIR"/*.gguf >/dev/null 2>&1; then echo "Next: bin/up.sh  (your model is already in $MODEL_DIR)"
 else echo "Next: put your model in $MODEL_DIR (bin/model.sh download <name>, or docs/MODELS.md), then:  bin/up.sh"; fi
