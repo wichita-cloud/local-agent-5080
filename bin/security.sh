@@ -113,7 +113,7 @@ TXT
       fi
     fi
     set -a; . "$CFG"; set +a
-    [ "${SECURITY_PROFILE:-}" = protected ] && { ensure_image || { warn "falling back to the Standard profile until Docker is available (bin/security.sh set protected)"; setkey SECURITY_PROFILE standard; }; }
+    [ "${SECURITY_PROFILE:-}" = protected ] && { ensure_image || { warn "running as Standard for now. Turn on Docker, then run the installer again (it will ask again) or: bin/security.sh set protected"; sed -i "/^SECURITY_PROFILE=/d" "$CFG"; SECURITY_PROFILE=standard; }; }   # unanswered, not "standard": a re-run asks again instead of keeping the fallback
     [ "$apply_now" = 1 ] && apply; exit 0 ;;
   set)
     p="${1:-}"; case "$p" in protected|standard) ;; *) die "usage: bin/security.sh set protected|standard";; esac
