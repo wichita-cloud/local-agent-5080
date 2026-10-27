@@ -18,8 +18,20 @@ The bug this file exists to prevent (keep the settimeout(None) lines)
   passed. Health probes that don't look like real traffic will not catch this; bin/bench.sh does.
 
 Drain flag: if $STATE_DIR/llama-draining exists, new connections are held (used before a deliberate restart).
+
+Load on demand. The model container never restarts by itself (bin/llama-up.sh uses --restart no), so a Windows restart
+always leaves the graphics card free for games. When a chat request (a POST, not a port probe or a model listing) arrives
+and the model is stopped, this gate starts it with `ONLY_IF_STOPPED=1 bin/llama-up.sh` and holds the turn while it loads.
+Never in game mode, never while draining. If the start fails (usually: a game is using the graphics card), the waiting
+turns get a 503 saying so, and the next attempt waits START_RETRY seconds. Output: $STATE_DIR/model-start.log.
+
+Never drop a turn silently. A turn that can't be served gets an HTTP 503 with a message the agent shows, instead of a
+closed connection (which reads as a blank reply):
+  * game mode ($STATE_DIR/game-mode.flag): answered at once, "the model is stopped (game mode)".
+  * llama still not ready after READY_TIMEOUT: "still loading, try again in a minute". The default covers a cold load of
+    the 27B (measured 144-185 s); the old 45 s cut off every turn sent during a model switch or a game-mode restore.
 """
-import os, select, socket, threading, time, urllib.request
+import json, os, re, select, socket, subprocess, threading, time, urllib.request
 
 LISTEN_PORT = int(os.environ.get("SHIM_PORT", "19080"))
 BACKEND     = ("127.0.0.1", int(os.environ.get("RAG_PORT", "9081")))   # memory proxy, which forwards to llama
@@ -27,7 +39,13 @@ LLAMA_HEALTH = "http://127.0.0.1:%s/health" % os.environ.get("LLAMA_PORT", "9080
 STATE_DIR   = os.path.expanduser(os.environ.get("STATE_DIR", "~/.local/state/local-agent"))
 DRAIN_FLAG  = os.path.join(STATE_DIR, "llama-draining")
 LOG         = os.path.join(STATE_DIR, "ready-proxy.log")
-READY_TIMEOUT = 45   # seconds to hold a connection while llama loads
+GAME_FLAG   = os.path.join(STATE_DIR, "game-mode.flag")
+READY_TIMEOUT = int(os.environ.get("READY_TIMEOUT", "240"))   # seconds to hold a connection while llama loads
+REPO        = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+START_LOG   = os.path.join(STATE_DIR, "model-start.log")
+START_RETRY = 60     # after a failed start, refuse at once for this long instead of trying again on every turn
+_start = {"proc": None, "at": 0.0, "rc": None, "done": 0.0}
+_start_lock = threading.Lock()
 
 
 def logf(msg):
@@ -48,6 +66,47 @@ def llama_ready():
         return False
 
 
+def last_log_line():
+    try:
+        with open(START_LOG, "rb") as f:
+            lines = [l.strip() for l in f.read()[-4000:].decode("utf-8", "replace").splitlines() if l.strip()]
+        line = re.sub(r"\x1b\[[0-9;]*m", "", lines[-1]) if lines else ""
+        return re.sub(r"\s*\(FORCE=1[^)]*\)", "", re.sub(r"^(FAIL|warn|ok)\s+", "", line))   # a sentence, not a log line
+    except Exception:
+        return ""
+
+
+def model_start():
+    """Start a stopped model. Returns None while it is starting (keep waiting), or a message if the start failed."""
+    with _start_lock:
+        p = _start["proc"]
+        if p is not None:
+            if p.poll() is None:
+                return None
+            _start.update(proc=None, rc=p.returncode, done=time.time())
+            logf("model start finished, exit %s" % p.returncode)
+        rc = _start["rc"]
+        if rc not in (None, 0, 75) and time.time() - _start["done"] < START_RETRY:
+            return ("The local model is not loaded and could not start: %s. Usually a game or another program is using "
+                    "the graphics card. Close it and send the message again (or restart Windows)." % (last_log_line() or "see " + START_LOG))
+        if time.time() - _start["at"] < 20:
+            return None      # a start just finished or another start-up holds the lock: give /health time
+        _start["at"] = time.time()
+        logf("model is stopped and a chat arrived: starting it")
+        try:
+            log = open(START_LOG, "ab")
+            # flock: never alongside bin/up.sh (it holds up.lock while it starts the model); exit 75 = it is busy doing that
+            _start["proc"] = subprocess.Popen(
+                ["flock", "-n", "-E", "75", os.path.join(STATE_DIR, "up.lock"), os.path.join(REPO, "bin", "llama-up.sh")],
+                env=dict(os.environ, ONLY_IF_STOPPED="1"), stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                start_new_session=True)
+            log.close()
+        except Exception as e:
+            logf("model start failed to launch: %s" % e)
+            _start.update(rc=1, done=time.time())
+        return None
+
+
 def pipe(src, dst):
     try:
         while True:
@@ -64,6 +123,18 @@ def pipe(src, dst):
             pass
 
 
+def refuse(client, message):
+    """Answer with an HTTP 503 and an OpenAI-style error the agent displays, then close."""
+    body = json.dumps({"error": {"message": message, "type": "model_unavailable", "code": 503}}).encode()
+    try:
+        client.sendall(b"HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nRetry-After: 60\r\n"
+                       b"Connection: close\r\nContent-Length: %d\r\n\r\n%s" % (len(body), body))
+        client.shutdown(socket.SHUT_WR)
+    except Exception:
+        pass
+    client.close()
+
+
 def handle(client):
     held = False
     try:
@@ -71,9 +142,21 @@ def handle(client):
         t0 = time.time()
         while not llama_ready():            # GATE: drain early client bytes so the client isn't blocked on send
             held = True
+            if os.path.exists(GAME_FLAG):
+                logf("model stopped (game mode): turn answered with 503")
+                refuse(client, "Game Mode is on, so the local model is stopped. Use Restore (the Restore icon, or bin/gpu-restore.sh, or the "
+                               "console) and send the message again.")
+                return
+            if buf.startswith(b"POST") and not os.path.exists(DRAIN_FLAG):
+                err = model_start()
+                if err:
+                    logf("model could not start: turn answered with 503")
+                    refuse(client, err)
+                    return
             if time.time() - t0 > READY_TIMEOUT:
-                logf("gate timeout after %ss, dropping connection" % READY_TIMEOUT)
-                client.close()
+                logf("gate timeout after %ss, turn answered with 503" % READY_TIMEOUT)
+                refuse(client, "The local model is still loading after %d s. Try again in a minute; if this keeps "
+                               "happening, run bin/verify.sh." % READY_TIMEOUT)
                 return
             r, _, _ = select.select([client], [], [], 1.0)
             if r:
@@ -83,7 +166,7 @@ def handle(client):
                     return
                 buf += d
         if held:
-            logf("held %.1fs for llama reload, now forwarding" % (time.time() - t0))
+            logf("held %.1fs for llama load, now forwarding" % (time.time() - t0))
         backend = socket.create_connection(BACKEND, timeout=10)
         backend.settimeout(None)   # CRITICAL: see module docstring
         client.settimeout(None)

@@ -18,7 +18,7 @@ ready in the morning. It's switched **off** by default; turn it on in the consol
 4. **Searches the web within a hard budget** (below), reads the top page of each search, and **writes 3 to 5 ideas**: what,
    why it fits your notes, a first step, and sources.
 5. **You decide what stays.** Ideas are saved to `workspace/overnight/<date>.md` and shown in the tab. Nothing enters the agent's
-   memory unless you press **Keep** (it's then written to `memory/overnight-ideas-kept.md`, which the nightly indexer picks up).
+   memory unless you press **Keep** (it's then written to `memory/overnight-ideas-kept.md`, which the indexer picks up within 10 minutes).
 
 Example (a test run with Qwen3.5-27B on made-up notes about a kitchen renovation and a food pantry, one search through a stand-in
 search service): it suggested getting a written electrical load calculation before ordering an induction range, because the notes

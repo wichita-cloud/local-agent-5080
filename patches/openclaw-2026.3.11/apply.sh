@@ -32,7 +32,11 @@ TEXT_TOOLCALL_JSON_PATH_ARRAY_V1|1|07-text-toolcall-json-path-array.py
 ALIAS_NORMALIZE_PATCH_V4|4|08-param-alias-normalize.py
 COMPACTION_SAFEGUARD_PATCH|3|09-compaction-safeguard.py
 WEB_FETCH_MAXCHARS_PATCH_V1|4|10-webfetch-maxchars.py
-LOCAL_AGENT_CONTROLUI_HIDE_WORKING_V1|1|11-controlui-hide-working-output.py"
+LOCAL_AGENT_CONTROLUI_HIDE_WORKING_V1|1|11-controlui-hide-working-output.py
+LOCAL_AGENT_CONTROLUI_HIDE_TOOLCARDS_V1|1|12-controlui-hide-tool-cards.py
+LOCAL_AGENT_SANDBOX_WRITE_STDIN_V1|4|13-sandbox-write-stdin.py
+LOCAL_AGENT_CONTROLUI_WORKING_STATUS_V1|1|14-controlui-working-status.py
+LOCAL_AGENT_JINA_FALLBACK_V1|4|15-webfetch-jina-fallback.py"
 
 count() { grep -l "$1" "$OPENCLAW_DIST"/*.js "$OPENCLAW_DIST"/control-ui/assets/index-*.js 2>/dev/null | wc -l; }
 

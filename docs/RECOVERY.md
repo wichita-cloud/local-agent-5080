@@ -45,5 +45,6 @@ bin/gpu-release.sh    # before gaming: stops the model, verifies VRAM is free, s
 bin/gpu-restore.sh    # after: recreates the model into a clean GPU, then benches and verifies
 ```
 Don't use `wsl --shutdown` to free the GPU: the model is the only thing in WSL using it, and a shutdown turns a 1-minute
-restore into a full recovery. If you moved your monitor to the 5080 to game, move it back to the motherboard
+restore into a full recovery. If Game Mode says the card is still not free, **restart Windows**: the model is never
+reloaded at sign-in (it loads with the first chat message), so after a restart the whole card is free. If you moved your monitor to the 5080 to game, move it back to the motherboard
 output **before** restoring.

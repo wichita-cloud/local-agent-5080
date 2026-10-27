@@ -72,8 +72,8 @@ case "$cmd" in
         [ "$free_mb" -ge "$1" ] || die "not enough space on $fs: ${free_mb} MB free, need $1 MB (file + 5 GB margin)"
       done
     }
-    fetch() {   # fetch <url> <file> <min-bytes>
-      local url=$1 f="$MODEL_DIR/$2" min=$3 have total got
+    fetch() {   # fetch <url> <file> <min-bytes> [sha256]
+      local url=$1 f="$MODEL_DIR/$2" min=$3 sha=${4:-} have total got
       have=$(stat -c%s "$f" 2>/dev/null || echo 0)
       [ "$have" -ge "$min" ] && { ok "already downloaded: $f ($have bytes)"; return 0; }
       total=$(curl -sIL -m 30 "$url" | tr -d '\r' | awk 'tolower($1)=="content-length:"{v=$2} END{print v+0}')
@@ -84,6 +84,13 @@ case "$cmd" in
       got=$(stat -c%s "$f" 2>/dev/null || echo 0)
       [ "$got" -eq "$total" ] || die "size mismatch: got $got bytes, expected $total. Run it again (or press Download again) to resume"
       [ "$got" -ge "$min" ] || die "$2 is smaller than expected ($min bytes): the profile and the file disagree"
+      # A pinned checksum (MODEL_SHA256 in the profile) proves the file is the one the profile was tested with, not a
+      # corrupted download or a file replaced upstream. About a minute for 14 GB.
+      if [ -n "$sha" ]; then
+        log "checking $2 against its known checksum"
+        [ "$(sha256sum "$f" | cut -d' ' -f1)" = "$sha" ] || { rm -f "$f"; die "$2 does not match its known checksum, so it was deleted. Run the download again; if it fails again, the file on Hugging Face has changed (report it)"; }
+        ok "checksum matches"
+      fi
       ok "downloaded $f ($got bytes)"
     }
     if [ -n "${MTP_DONOR_URL:-}" ]; then
@@ -101,7 +108,7 @@ case "$cmd" in
         ok "built $MODEL_DIR/$MODEL_FILE ($(stat -c%s "$MODEL_DIR/$MODEL_FILE") bytes)"
       fi
     else
-      fetch "$MODEL_URL" "$MODEL_FILE" "$MIN_BYTES"
+      fetch "$MODEL_URL" "$MODEL_FILE" "$MIN_BYTES" "${MODEL_SHA256:-}"
     fi
     [ -n "${MMPROJ_URL:-}" ] && fetch "$MMPROJ_URL" "$MMPROJ_FILE" "${MMPROJ_MIN_BYTES:-1}"
     ok "ready. Next: bin/install.sh (to run this model instead of the default, first run: bin/model.sh use $new)" ;;

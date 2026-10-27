@@ -77,9 +77,11 @@ What it shows:
   runs on the transcript.
 - **Misheard words mostly didn't matter.** Two questions were transcribed wrongly on every run ("Wi-Fi" came out as
   "Was the Wi-Fi", and "carprofen" as "car prevent"), yet the memory lookup still found the right fact and the answer was
-  right, because it matches on meaning. The one miss (8B, "When is my sister's birthday?") was transcribed perfectly;
-  the memory lookup simply didn't return the fact on that run, which I have not reproduced or explained, so treat it as
-  noise until it is seen again.
+  right, because it matches on meaning. The one miss (8B, "When is my sister's birthday?") was transcribed perfectly,
+  and the model wasn't at fault: that lookup took 2.50 s (every other one 0.20-0.36 s), hit the memory proxy's 2.5 s
+  timeout, and the turn went ahead with no memories, so the 8B said it didn't have that information. It was the first
+  lookup after a model load, which pushes the memory service's weights out of RAM. Fixed since: the weights are held in
+  RAM, a timed-out lookup is retried once, and if memory still can't be checked the agent is told so and says so.
 - The questions were easy enough that the models mostly got them all. Harder ones (several memories that must be
   combined, or a memory that should be ignored) are where they will separate, and this test doesn't cover those.
 

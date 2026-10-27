@@ -97,6 +97,47 @@ Things worth knowing:
 - Don't expose the gateway to the LAN or the internet. If you must, set `gateway.controlUi.allowedOrigins` explicitly rather
   than enabling any "dangerously allow" fallback, and put it behind a VPN.
 
+## What leaves your PC
+
+The model, your chats, your notes and your memories never leave the PC. These do, and each one tells someone your IP address:
+
+| What | Who receives it | When |
+|---|---|---|
+| Your web-search words | the public search engines SearXNG asks (it sends no cookies and no account) | each web search |
+| The address of each page the agent reads | that website | each `web_fetch` |
+| The address of a page that refused the agent | **Jina AI** (owned by Elastic since October 2025), and your Jina account if you set a key | only with the Jina option on (`JINA_FALLBACK=on`, off by default) |
+| Overnight-research search words | Tavily or Brave, tied to your API key | only if you set one up (docs/OVERNIGHT.md) |
+| Downloads: models, programs, Docker images | Hugging Face, GitHub, npm, PyPI, Docker registries, Ubuntu | install, updates, a model download |
+
+Nothing else reports home: usage statistics are switched off for every component that has them (`bin/lib.sh` sets
+`DO_NOT_TRACK`, `HF_HUB_DISABLE_TELEMETRY`, ChromaDB's `anonymized_telemetry=False`), and the memory models stay offline
+after their first download.
+
+**About the Jina option.** Jina's Reader turns a page that blocks automated visits into readable text, which is why the
+original system used it. But Jina then knows which pages your agent wanted and from which IP address, and Jina's own
+policy pages do not say how long Reader requests are kept (they now defer to Elastic's privacy statement). Leave it off
+unless the agent often fails to read pages you need. Switch it in the console's Security tab, or `bin/security.sh jina on|off`.
+Measured 2026-10-26: of 8 home pages that refused a direct fetch (401/403), Jina returned the real page for 4 (Zillow,
+Home Depot, Best Buy, the New York Times) and a CAPTCHA for the other 4. Without a key it is also less dependable for
+popular sites: Jina blocked anonymous requests for nytimes.com for a few hours because of other people's traffic, minutes
+after the same page had worked.
+
+### Being more anonymous: what works now, and options for later
+- **Now, simplest: a VPN on Windows.** WSL's traffic leaves through Windows, so a VPN app hides your home IP address from
+  every service in the table above at once (search engines, websites, Jina, Hugging Face). The VPN provider then sees
+  where the traffic goes instead, so choose one you trust.
+- **Later: search through Tor.** SearXNG can send every engine's request through Tor (`outgoing: using_tor_proxy: true`,
+  with a Tor SOCKS proxy such as a `tor` container on 127.0.0.1:9050, and `extra_proxy_timeout`). Expect slower searches
+  and fewer results: many engines answer Tor with a CAPTCHA or nothing. Not built in yet.
+- **Later: fetch pages through Tor or a proxy too.** OpenClaw can send `web_fetch` through an HTTP proxy from the
+  environment; the original system did this with two small patches (forcing the environment proxy and skipping a DNS
+  pre-check that fails behind a proxy). Pointing that at a local Tor proxy would hide your IP from websites. Not built in.
+- **Later: no third party for blocked pages.** Jina's Reader is open source (Apache-2.0) and can run locally in Docker,
+  as can alternatives such as Crawl4AI. A local reader renders JavaScript pages without telling anyone else what you
+  read; it does not get past sites that block your IP, which is the case where only Jina (or a VPN) helps.
+- **Accounts tie requests to you.** A Jina, Tavily, Brave or Hugging Face key links what it is used for to that account.
+  Leave the keys empty where you can (SearXNG needs none; the models download without a Hugging Face login).
+
 ## Prompt injection
 Anything the agent reads (web pages, files, emails) can contain instructions aimed at it. Local models are generally *more*
 susceptible than large hosted ones. Don't give it credentials or access you wouldn't give to the content it reads.

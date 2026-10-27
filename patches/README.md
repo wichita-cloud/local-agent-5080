@@ -21,6 +21,10 @@ patches; re-run `apply.sh` afterwards. Porting to a new OpenClaw version means r
 | 09 | compaction-safeguard | Tool-heavy conversations could never be compacted (the safeguard didn't recognize tool roles), so long sessions hit the context wall. |
 | 10 | webfetch-maxchars | `web_fetch` returned up to 50k characters (~12.5k tokens); 3-4 fetches filled a 32-45k context. Lowered to 30k. |
 | 11 | controlui-hide-working-output | the dashboard chat shows raw tool output (whole web pages as JSON) by default; this makes it hidden by default. The dashboard's own toolbar button (brain icon) turns it back on. Edits `dist/control-ui`. |
+| 12 | controlui-hide-tool-cards | with that button off, the chat still showed a card for every tool call (the search query as JSON) and each tool's full output while a turn ran. Now those are hidden too, with the dashboard's own "working" dots shown instead. Button on: everything shows, as before. Edits `dist/control-ui`. |
+| 13 | sandbox-write-stdin | in the Protected profile every file the agent wrote came out EMPTY while the tool reported success ("Successfully wrote 1182 bytes"), and `edit` emptied existing files. OpenClaw fed its in-box Python helper both its program and the file data on the same stdin, so the data was lost. Now the data travels on its own descriptor. Edits 4 `dist/*.js` bundles. |
+| 14 | controlui-working-status | with the working output hidden, a turn that used tools showed only animated dots until the answer began; a minute spent writing a long file looked like a frozen chat. Now that spot reads e.g. "Working... last step: Writing projects/opportunity-log.md". Needs 12. Edits `dist/control-ui`. |
+| 15 | webfetch-jina-fallback | OPTIONAL, does nothing unless `JINA_FALLBACK=on`: when a site refuses `web_fetch` (bot check, 403, a JavaScript-only page), retry once through the Jina Reader (`r.jina.ai`), with `JINA_API_KEY` if set. Privacy: Jina then sees that page address and your IP (docs/SECURITY.md). Edits 4 `dist/*.js` bundles. |
 
 Order matters: 02-07 extend the parser that 01 installs.
 

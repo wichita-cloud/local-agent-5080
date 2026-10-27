@@ -39,6 +39,11 @@ measured on that one.
 > Copy both `.bat` files to your desktop for one-click switching; each one prints these steps as a reminder. The
 > screen may go dark for a moment between steps 2 and 3. That's expected.
 >
+> **Graphics card not freeing up? Restart Windows.** That always works. After a restart the agent puts nothing on the
+> graphics card until you send it a message: the model loads with your first message (about a minute), not before. This
+> holds even with the sign-in option on. Game Mode itself checks the card really came free and says so if it didn't;
+> the usual reason is another program on the 5080 (a browser, or the desktop itself), which `windows\gpu-check.ps1` lists.
+>
 > **Don't want to bother? Use a smaller model and leave the monitor on the 5080.** Measured with the desktop on the
 > 5080, the 14B still ran at 13.6 ms/token (~74 tok/s, about 1.5× the 27B's speed) with 3 GB of VRAM to spare. It is
 > weaker at multi-step tool use. The 8B leaves even more room. Switch in the console's Models tab. The health check then shows the display as a *note*, not a failure, as long as ≥1 GiB stays free.
@@ -65,6 +70,7 @@ measured on that one.
 | Web console | `http://localhost:18800`: is it running optimally, switch or download models, edit the agent's character |
 | Switching models | one click in the console, or `bin/model.sh use <profile>`; nothing else needs editing |
 | Voice (optional add-on) | talk to the agent with the microphone (local speech-to-text) and hear it answer in a voice you choose or clone from a 10-30 s recording; all local, on spare CPU cores ([docs/VOICE.md](docs/VOICE.md)) |
+| Memory you can manage | its notes become memories within 10 minutes; drop notes into a "Teach my agent" folder and it reports which sections it will recall; outdated memories are retired (with undo); nightly verified backups with a restore command ([docs/MEMORY.md](docs/MEMORY.md)) |
 | Overnight work (optional, **beta**) | while you're away, uses the idle GPU to research your project topics (web searches within a monthly budget you set; works with no account and no card) and have a few ideas ready each morning; you choose the hours and what to keep ([docs/OVERNIGHT.md](docs/OVERNIGHT.md)) |
 | Safer by default | at install you choose **Protected**: the agent's commands run in a Docker sandbox that sees only its own workspace and the folders you share, where programs it runs have no internet (web search and reading pages still work) and no access to your Windows drives ([docs/SECURITY.md](docs/SECURITY.md)) |
 | Fine-tuning (optional) | hidden under **Advanced** on each model: temperature and other sampling settings, context length, thinking. Each model keeps its own |
@@ -155,9 +161,12 @@ knowledge base, plus exactly where your data lives and what (if anything) goes o
 | Check it isn't secretly slow | Health → Run benchmark | `bin/bench.sh` |
 | Try a different model | Models → Download, then Switch | `bin/model.sh download <name>`, then `bin/model.sh use <name>` |
 | Change its personality | Character tab | edit the files in `~/.openclaw/workspace/` |
+| Back up / restore its notes, memories and settings | | `bin/backup.sh` (also nightly), `bin/backup.sh list`, `bin/backup.sh restore <name>` ([docs/MEMORY.md](docs/MEMORY.md)) |
+| See the notes and files your agent wrote | | In Windows Explorer's address bar: `\\wsl.localhost\Ubuntu-22.04\home\<your Ubuntu user>\.openclaw\workspace` (the live folder, not a copy) |
 | Play a game | **Game Mode** → Win+P (graphics card's screen only) → monitor input to DisplayPort. Afterwards: Win+P (motherboard's screen only) → input to HDMI → **Restore Agent** | `bin/gpu-release.sh` … `bin/gpu-restore.sh` |
+| Free the graphics card when Game Mode didn't | Restart Windows: afterwards nothing of the agent is on the card until you send a message | |
 | Bring everything back after a reboot | Health → Bring everything up | `bin/up.sh` (starts Docker Desktop if needed, then every layer, then verifies) |
-| Have it start by itself when you sign in to Windows | | `windows\Autostart.ps1 -Install` in PowerShell (`-DryRun` shows what it adds; `-Remove` undoes it). Details: [docs/STABILITY.md](docs/STABILITY.md) |
+| Have it start by itself when you sign in to Windows | | `powershell -ExecutionPolicy Bypass -File windows\Autostart.ps1 -Install` (Windows blocks scripts by default, hence `Bypass`; `-DryRun` shows what it adds; `-Remove` undoes it). It starts everything except the model, which loads with your first message, so the graphics card stays free after a restart. Details: [docs/STABILITY.md](docs/STABILITY.md) |
 
 ---
 
@@ -181,6 +190,8 @@ Full walkthrough: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 |---|---|
 | [docs/EXPLORE.md](docs/EXPLORE.md) | Ideas to try, and where your data lives |
 | [AGENTS.md](AGENTS.md) | Map of the repo and its invariants, for humans and AI coding tools |
+| [CHANGELOG.md](CHANGELOG.md) | What changed in each update, and why (how each problem was found) |
+| [docs/MEMORY.md](docs/MEMORY.md) | How memories are made (every 10 minutes, one per section), teaching it with the "Teach my agent" folder, undoing a retired memory, the nightly recall check, and backups + restore |
 | [docs/OVERNIGHT.md](docs/OVERNIGHT.md) | Optional overnight research: the hours, the search budget, what it does and doesn't do, and how ideas get into memory |
 | [docs/VOICE.md](docs/VOICE.md) | Optional voice: install, cloning a voice, recording a clean clip with Audacity, consent and watermarking |
 | [docs/CONSOLE.md](docs/CONSOLE.md) | The web console: what "optimal" means, switching and adding models, editing the character |

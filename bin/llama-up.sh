@@ -8,7 +8,13 @@
 #     torn down, and a launch inside that window aborts with "failed to fit params to free device memory"
 #   * same port inside and outside the container, and a --health-cmd override (the image's built-in
 #     healthcheck assumes :8080)
+#   * publishes the port on 127.0.0.1 only: Docker Desktop's own firewall rule lets ANY inbound connection reach a
+#     port published on all interfaces, and the model API has no password (measured: other machines could use it)
 #   * pins CPUs (LLAMA_CPUSET) and sets -t to match
+#   * --restart no: Docker never brings the model back by itself. With unless-stopped, Docker Desktop reloaded it at every
+#     Windows sign-in, so restarting Windows did NOT free the graphics card for a game. A stopped model is loaded again by
+#     the readiness gate when the next message arrives (services/ready_proxy.py), or by bin/up.sh / the Restore icon.
+#   * ONLY_IF_STOPPED=1 (used by that gate): do nothing if the container is already running (it may still be loading)
 #   * health ≠ proof. After this, run bin/bench.sh: a config can load fine and fail on the first long prompt.
 set -u
 . "$(dirname "$0")/lib.sh"
@@ -16,6 +22,9 @@ load_profile "${1:-}" || exit 1
 
 [ -f "$GAME_FLAG" ] && [ "${FORCE:-0}" != 1 ] && die "game mode is on ($GAME_FLAG). Use bin/gpu-restore.sh, or FORCE=1."
 docker_ok || die "Docker is not reachable from WSL. Start Docker Desktop (and enable WSL integration for this distro)."
+if [ "${ONLY_IF_STOPPED:-0}" = 1 ] && [ "$(docker inspect -f '{{.State.Running}}' "$LLAMA_CONTAINER" 2>/dev/null)" = true ]; then
+  ok "model container already running"; exit 0
+fi
 
 f="$MODEL_DIR/$MODEL_FILE"
 size=$(stat -c%s "$f" 2>/dev/null || echo 0)
@@ -59,11 +68,11 @@ fi
 
 # shellcheck disable=SC2086   # word-splitting of the *_ARGS strings is intended
 docker run -d --name "$LLAMA_CONTAINER" \
-  --restart unless-stopped \
+  --restart no \
   --log-driver json-file --log-opt max-size=20m --log-opt max-file=3 \
   --gpus all \
   --cpuset-cpus="$LLAMA_CPUSET" \
-  -p "$LLAMA_PORT:$LLAMA_PORT" \
+  -p "127.0.0.1:$LLAMA_PORT:$LLAMA_PORT" \
   --health-cmd "curl -f http://localhost:$LLAMA_PORT/health || exit 1" \
   --health-interval 30s --health-start-period 180s \
   -v "$MODEL_DIR":/models:ro \

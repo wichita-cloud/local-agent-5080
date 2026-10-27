@@ -49,6 +49,10 @@ def searx(query, time_range=""):
     url = SEARX + "/search?" + urllib.parse.urlencode(params)
     with urllib.request.urlopen(urllib.request.Request(url, headers={"Accept": "application/json"}), timeout=40) as r:
         d = json.loads(r.read())
+    failed = set()
+    for e in d.get("unresponsive_engines") or []:   # [[engine, reason], ...]: engines that were blocked or timed out
+        if isinstance(e, (list, tuple)) and e:
+            failed.add("%s (%s)" % (e[0], e[1]) if len(e) > 1 and e[1] else str(e[0]))
     out = []
     for x in d.get("results") or []:
         u = str(x.get("url", ""))
@@ -56,30 +60,38 @@ def searx(query, time_range=""):
             out.append({"title": re.sub(r"\s+", " ", str(x.get("title", "")))[:200], "url": u,
                         "snippet": re.sub(r"\s+", " ", str(x.get("content", "")))[:400],
                         "date": str(x.get("publishedDate") or "")[:10]})
-    return out
+    return out, failed
 
 
 def search(query, freshness=""):
+    """(results, time range, note, engines that failed to answer)."""
     tr = RANGE.get(str(freshness).lower(), "") or recency_from_words(query)
-    res = searx(query, tr)
+    res, failed = searx(query, tr)
     note = ""
     if tr and len(res) < 3:                     # a time limit can leave nothing: widen it rather than say "no results"
-        wide = searx(query, "")
+        wide, f2 = searx(query, "")
+        failed |= f2
         if len(wide) > len(res):
             res, note = wide, "(no recent results; these are not limited to recent dates)"
     seen, uniq = set(), []
     for r in res:
         if r["url"] not in seen:
             seen.add(r["url"]); uniq.append(r)
-    return uniq[:MAX_RESULTS], tr, note
+    return uniq[:MAX_RESULTS], tr, note, sorted(failed)
 
 
-def render(query, results, tr, note):
+def render(query, results, tr, note, failed=()):
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     head = "Search results for: %s\nSearched on %s (UTC)%s. %s\n" % (query, today, (", limited to the past %s" % tr) if tr and not note else "", note)
+    if not results and failed:   # say WHY: "no results" from blocked engines is not evidence that nothing exists
+        return head + ("\nNo results, because the search engines did not answer: %s. This says nothing about whether "
+                       "the information exists. Tell the user search is blocked or rate-limited right now, try again in "
+                       "a few minutes, or ask the user for a link." % ", ".join(failed))
     if not results:
-        return head + "\nNo results. The search engines may be rate-limiting this PC, or the words found nothing. Try different words, or ask the user for a link."
+        return head + "\nNo results. The search engines answered but found nothing for these words. Try different words, or ask the user for a link."
     lines = [head]
+    if failed:
+        lines.append("(Some search engines did not answer: %s. Results may be incomplete.)" % ", ".join(failed))
     for i, r in enumerate(results, 1):
         lines.append("%d. %s%s\n   %s\n   %s" % (i, r["title"] or r["url"], (" (" + r["date"] + ")") if r["date"] else "", r["url"], r["snippet"]))
     lines.append("\nThese are search results, not verified facts. Open a page with web_fetch to read it. Prefer the pages whose dates match what the user asked about.")
@@ -139,9 +151,10 @@ class H(BaseHTTPRequestHandler):
         else:
             t0 = time.time()
             try:
-                results, tr, note = search(query, body.get("search_recency_filter") or "")
-                text, cites = render(query, results, tr, note), [r["url"] for r in results]
-                log("search ok: %d results, window=%s, %.1fs" % (len(results), tr or "none", time.time() - t0))
+                results, tr, note, failed = search(query, body.get("search_recency_filter") or "")
+                text, cites = render(query, results, tr, note, failed), [r["url"] for r in results]
+                log("search ok: %d results, window=%s, %.1fs%s" % (len(results), tr or "none", time.time() - t0,
+                                                                  ", engines not answering: " + ", ".join(failed) if failed else ""))
             except Exception as e:
                 text, cites = "The local search service could not search (%s). Is SearXNG running? bin/searxng.sh up" % type(e).__name__, []
                 log("search failed: %s" % type(e).__name__)
@@ -157,6 +170,9 @@ def selftest():
     out = render("q", [{"title": "T", "url": "https://example.org/a", "snippet": "s", "date": "2026-10-17"}], "week", "")
     assert "1. T (2026-10-17)" in out and "limited to the past week" in out and "https://example.org/a" in out
     assert "No results" in render("q", [], "", "")
+    blocked = render("q", [], "", "", ["duckduckgo (CAPTCHA)", "google (too many requests)"])
+    assert "did not answer: duckduckgo (CAPTCHA), google (too many requests)" in blocked and "says nothing" in blocked
+    assert "Results may be incomplete" in render("q", [{"title": "T", "url": "https://e.org", "snippet": "", "date": ""}], "", "", ["x"])
     assert RANGE["pw"] == "week" and RANGE["day"] == "day"
     print("search_shim selftest ok")
 

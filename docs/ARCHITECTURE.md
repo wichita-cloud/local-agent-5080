@@ -15,16 +15,22 @@
       ├─ console/server.py       :18800  web console (system python3, stdlib only; runs the bin/ scripts)
       ├─ voice_server.py         :8880   optional: text-to-speech + voice cloning (Chatterbox, CPU cores 8-15, own venv)
       ├─ stt_server.py           :8890   optional: speech-to-text (faster-whisper, same venv and cores; mic button + voice notes in)
-      └─ cron: guards/services-watchdog.sh (1 min), guards/decode-floor.sh (5 min), memory_ingest (nightly)
+      └─ cron: guards/services-watchdog.sh (1 min), guards/decode-floor.sh (5 min), memory_ingest (10 min, new text only)
 ```
 
 ## Request path (one chat turn)
 1. You type in the dashboard. OpenClaw assembles the prompt (its system prompt + your workspace instruction files +
    history + your message) and POSTs to `http://127.0.0.1:19080/v1/chat/completions` asking for `local-model`.
-2. **ready_proxy** checks llama's `/health`. If llama is loading (restart, model switch), it holds the connection for up to 45 s
-   instead of failing the turn. Then it splices raw bytes to the memory proxy.
+2. **ready_proxy** checks llama's `/health`. If llama is loading (restart, model switch), it holds the connection for up to 240 s
+   (`READY_TIMEOUT`; a cold 27B load takes 144-185 s) instead of failing the turn. Then it splices raw bytes to the memory
+   proxy. If the model is stopped (after a Windows restart or a crash, not game mode), a chat message starts it
+   (`bin/llama-up.sh`) and is held while it loads. If the model still isn't ready, can't start (graphics card busy), or is
+   stopped for game mode, the turn gets an HTTP 503 with a message the agent shows, never a silently closed connection.
 3. **rag_proxy** takes your latest message, queries the memory service (~1.3 s), and if any memory scores ≥ 0.5, prefixes
-   up to 3 of them to your message. It always fails open.
+   up to 3 of them to your message. It fails open, but never silently: a lookup that times out is retried once, and if it
+   still fails the model is told memory couldn't be checked (so it says so instead of "I don't know"), and the failure is
+   counted on `/health`, which `verify.sh` and the console report. When web search is on, it also adds a one-line note
+   after your message telling the model to search before saying it doesn't know (`SEARCH_NUDGE=0` turns this off).
 4. **llama.cpp** reuses its prompt cache up to the first changed token, reads the rest (~1,650 tok/s), and streams
    tokens back (~20 ms each).
 5. OpenClaw parses the reply. If it contains tool calls (including text-shaped ones, via the patches), it runs them and loops.

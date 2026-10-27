@@ -5,6 +5,9 @@ Start with `bin/verify.sh` and fix the **lowest** failing layer first.
 ## Speed
 | Symptom | First check | Fix |
 |---|---|---|
+| The agent says it saved a file, but the file is empty (0 bytes); `bin/verify.sh` layer 5 counts empty files | `patches/openclaw-2026.3.11/apply.sh --check`: is `LOCAL_AGENT_SANDBOX_WRITE_STDIN_V1` there? | Protected profile on an unpatched OpenClaw loses every sandboxed write. Re-apply the patches (`sudo -E patches/openclaw-2026.3.11/apply.sh`), `bin/gateway-up.sh`, then ask the agent to write the files again (its chat history still has their text) |
+| Game Mode says the graphics card was NOT freed | `windows\gpu-check.ps1` lists the programs on the 5080 | close them (often a browser, or the desktop drawn by the 5080), or **restart Windows**: the agent loads nothing onto the card after a restart until you send a message |
+| First message after a restart takes a minute or two | `tail ~/.local/state/local-agent/model-start.log` | normal: the model loads with the first message. If the reply says the graphics card is busy, close the game or program using it and send again |
 | Replies slow, everything green | `bin/bench.sh` → decode ≫ 21 ms/token? then `windows\gpu-check.ps1` | Spill. Free VRAM (display off the 5080, close or pin apps), then `bin/llama-up.sh`. STABILITY.md |
 | Slow only on the first message of a session | normal: a ~20k-token cold prompt takes ~14 s to read | keep instruction files lean; TUNING.md (prompt order) |
 | Every follow-up turn takes 4-5 s before it starts | normal for hybrid models (re-read from the last 8k checkpoint) | move content that changes each turn to the end of the prompt |
@@ -18,7 +21,10 @@ Start with `bin/verify.sh` and fix the **lowest** failing layer first.
 | Symptom | First check | Fix |
 |---|---|---|
 | Long turns die with no error; short ones fine | something on the path has a timeout shorter than first-token time | ready_proxy must clear its socket timeouts (it does; don't remove those lines) |
-| Turn fails right after a model restart | `cat ~/.local/state/local-agent/ready-proxy.log` for "gate timeout" | model took >45 s to load; wait and retry, or raise READY_TIMEOUT |
+| Turn fails right after a model restart with "still loading" | `cat ~/.local/state/local-agent/ready-proxy.log` for "gate timeout" | model took >240 s to load; wait and retry, or raise READY_TIMEOUT in `config/stack.env` |
+| Agent says it "couldn't check its memory" | `grep FAILED ~/.local/state/local-agent/rag-proxy.log`; `bin/verify.sh` counts them | the lookup timed out twice. Usually right after a model load or with every CPU core busy; repeated failures mean the memory service is stuck (the watchdog restarts it) |
+| Agent says it has no information about something recent, or offers to search instead of searching | `openclaw config get tools.web.search.enabled`; `curl -s localhost:18890/health` | `false` or no answer: search isn't running (`bin/searxng.sh up`), then start a new chat (`/new`). If search is on, check that `SEARCH_NUDGE` isn't `0` |
+| Dashboard chat shows raw JSON from searches and web pages | the brain icon in the chat toolbar ("Toggle assistant thinking/working output") | click it to turn working output off; the browser remembers the choice per address |
 | `CUDA error: device not ready` / RemoteDisconnected on long prompts | context or ubatch too big for the VRAM left | lower CTX, keep UBATCH 128 (STABILITY.md) |
 | Container crash-loops with "failed to fit params to free device memory" | relaunched before the previous CUDA context freed | `bin/llama-up.sh` (it waits); don't `docker restart` in a loop |
 | Model serves garbage | the GGUF is truncated | re-download; compare size to MIN_BYTES |
@@ -41,7 +47,9 @@ Start with `bin/verify.sh` and fix the **lowest** failing layer first.
 | Gateway won't start | `tail ~/.local/state/local-agent/gateway.log` | `bin/gateway-up.sh` (re-applies all config) |
 | Agent says "good morning" at night | USER_TIMEZONE empty and system TZ is UTC | set USER_TIMEZONE, `bin/gateway-up.sh` |
 | Context-overflow errors | `bin/verify.sh` layer 5: contextWindow ≠ llama -c | `bin/gateway-up.sh` rewrites it from the profile |
-| Agent "forgot" things | memory service up? `curl localhost:5766/health` count > 0? | `services/memory_ingest.py` feeds notes in; runs nightly |
+| Agent "forgot" things | memory service up? `curl localhost:5766/health` count > 0? `tail ~/.local/state/local-agent/ingest.log` | notes in `memory/`, `projects/`, `knowledge/` become memories every 10 minutes (docs/MEMORY.md); a fact told only in chat is remembered once the agent writes it down. Lost files: `bin/backup.sh restore <name>` |
+| A taught note says NOT FOUND or WEAK for a section | `Documents\Teach my agent\done\<note>.log` | put the key fact and names in that section's heading and first sentence, then drop the note again (docs/MEMORY.md) |
+| `ingest.log` says "NOT RETIRING ANYTHING" | `bin/verify.sh` (empty files?), `bin/backup.sh list` | many of the agent's files were emptied or deleted at once; memories were kept on purpose. If you didn't do it, `bin/backup.sh restore <name>` |
 
 ## Platform
 | Symptom | First check | Fix |

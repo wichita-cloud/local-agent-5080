@@ -15,6 +15,12 @@ set -u
 . "$(dirname "$0")/lib.sh"
 chmod +x "$REPO"/bin/*.sh "$REPO"/guards/*.sh "$REPO"/patches/*/apply.sh 2>/dev/null
 
+# An update (git pull, then this script) on an install that has data: save it first, so an update can't cost anything
+if [ -f "$STATE_DIR/install.complete" ] && curl -sf -m 5 "http://127.0.0.1:${MEMORY_PORT:-5766}/health" >/dev/null 2>&1; then
+  log "saving a backup before the update"
+  "$REPO/bin/backup.sh" now pre-update | tail -1 || warn "the pre-update backup was incomplete (see ~/local-agent-backups); continuing"
+fi
+
 log "0/9 checking for conflicts (ports, an existing OpenClaw)"
 "$REPO/bin/preflight.sh" || exit 1
 set -a; . "$REPO/config/stack.env"; set +a      # preflight may have moved a port
@@ -45,6 +51,13 @@ if ! grep -q 'service cron start' /etc/wsl.conf 2>/dev/null; then
   fi
 else ok "cron already starts on boot"; fi
 pgrep -x cron >/dev/null || sudo service cron start >/dev/null
+# A WSL distro booted with systemd can unregister Windows interop for the WHOLE WSL VM (its systemd-binfmt service) and
+# drop Docker Desktop's CLI mount: then powershell.exe / nvidia-smi.exe fail with "Exec format error" in every distro.
+# This stack doesn't need systemd. Not changed here (other software of yours may rely on it): said, so the cause is known.
+if grep -qiE '^[[:space:]]*systemd[[:space:]]*=[[:space:]]*true' /etc/wsl.conf 2>/dev/null; then
+  warn "systemd is on in this Ubuntu (/etc/wsl.conf). It can stop Windows programs from running inside EVERY WSL distro"
+  warn "  (Exec format error). This stack does not need it. If bin/verify.sh reports that, see docs/TROUBLESHOOTING.md"
+fi
 
 log "3/9 Node + OpenClaw $OPENCLAW_VERSION"
 # WSL appends the Windows PATH, which can include Windows' own node/npm (C:\Program Files\nodejs). The nvm installer
@@ -65,7 +78,7 @@ log "4/9 Python venv (services)"
 if [ ! -x "$VENV/bin/python3" ]; then python3 -m venv "$VENV" || die "venv creation failed"; fi
 if ! "$VENV/bin/python3" -c 'import chromadb, sentence_transformers, requests' 2>/dev/null; then
   "$VENV/bin/pip" install -q --upgrade pip
-  "$VENV/bin/pip" install -q torch --index-url https://download.pytorch.org/whl/cpu || die "torch (CPU) install failed"
+  "$VENV/bin/pip" install -q "torch<3" --index-url https://download.pytorch.org/whl/cpu || die "torch (CPU) install failed"
   "$VENV/bin/pip" install -q -r "$REPO/services/requirements.txt" || die "service requirements install failed"
 fi
 ok "venv ready ($VENV)"

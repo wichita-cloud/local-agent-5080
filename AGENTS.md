@@ -65,8 +65,10 @@ Breaking any of these causes a failure that is easy to miss. The reasoning is in
 7. **For the 27B, the display must not be on the NVIDIA GPU.** If it is, Windows takes VRAM, llama spills ~300 MB to system RAM,
    and decode drops from ~20 to ~120 ms/token with no error anywhere. `windows/gpu-check.ps1` and `verify.sh` check this.
    Smaller profiles (14B, 8B) leave room for the desktop, so the check only warns while ≥1 GiB of VRAM stays free.
-8. **The memory proxy and readiness gate must fail open.** They sit on the chat path, so an error in either must
-   forward the original request unchanged.
+8. **The memory proxy and readiness gate must fail open, but never silently.** They sit on the chat path, so an error
+   in either must not fail the turn. But a turn that quietly lost its memories reads as the model not knowing a fact it
+   had stored, and a dropped connection reads as a blank reply. So a failed memory lookup tells the model (which tells
+   the user) and is counted on the proxy's `/health`; a turn the gate can't serve gets an HTTP 503 with a message.
 9. **Don't match processes with `pgrep -f`/`pkill -f` on a script name.** It matches the shell that's searching.
    Kill by port owner (`port_pid` in `bin/lib.sh`).
 10. **Writes over `ssh -n` or `docker exec` without `-i` write zero bytes and report success.** Read the size back after writing.

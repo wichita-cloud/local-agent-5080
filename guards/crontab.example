@@ -2,6 +2,9 @@
 # REPO is replaced with the repo path at install time.
 * * * * *   /bin/bash REPO/guards/services-watchdog.sh >/dev/null 2>&1
 */5 * * * * /bin/bash REPO/guards/decode-floor.sh >/dev/null 2>&1
-30 3 * * *  /bin/bash -c '. REPO/bin/lib.sh && "$VENV/bin/python3" REPO/services/memory_ingest.py >> "$STATE_DIR/ingest.log" 2>&1'
+*/10 * * * * /bin/bash -c '. REPO/bin/lib.sh && flock -n "$STATE_DIR/ingest.lock" "$VENV/bin/python3" REPO/services/memory_ingest.py >> "$STATE_DIR/ingest.log" 2>&1'
 */10 * * * * /bin/bash REPO/guards/overnight-tick.sh >/dev/null 2>&1
 15 4 * * *  /bin/bash REPO/guards/trim-logs.sh >/dev/null 2>&1
+*/2 * * * * /bin/bash -c '. REPO/bin/lib.sh && "$VENV/bin/python3" REPO/services/teach_inbox.py >> "$STATE_DIR/teach.log" 2>&1'
+40 2 * * *  /bin/bash -c '. REPO/bin/lib.sh && REPO/bin/backup.sh >> "$STATE_DIR/backup.log" 2>&1'
+40 4 * * *  /bin/bash -c '. REPO/bin/lib.sh && "$VENV/bin/python3" REPO/services/memory_eval.py >> "$STATE_DIR/memory-eval.log" 2>&1'

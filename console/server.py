@@ -243,11 +243,17 @@ def status():
     # 3 model server
     alias = c.get("MODEL_ALIAS", "local-model")
     st = ls.get("container")
-    add("Model", "container", "ok" if st == "running" else "fail", st or "?",
-        "" if st == "running" else "Models tab → Switch to the active profile, or run bin/llama-up.sh")
+    # not loaded (after a Windows restart or a crash) is normal: the readiness gate loads it with the next chat message
+    standby = st in ("exited", "created", "missing") and not os.path.exists(os.path.join(sd, "game-mode.flag"))
+    if standby:
+        add("Model", "container", "skip", "not loaded: the graphics card is free",
+            "It loads with your next chat message (about a minute), or run bin/up.sh.")
+    else:
+        add("Model", "container", "ok" if st == "running" else "fail", st or "?",
+            "" if st == "running" else "Models tab → Switch to the active profile, or run bin/llama-up.sh")
     code, body = http_get(f"http://127.0.0.1:{c.get('LLAMA_PORT', 9080)}/v1/models", 5)
     serving = code == 200 and f'"{alias}"' in body
-    add("Model", f"serving {alias}", "ok" if serving else ("wait" if code == 503 else "fail"),
+    add("Model", f"serving {alias}", "ok" if serving else ("wait" if code == 503 else ("skip" if standby else "fail")),
         "loading…" if code == 503 else ("" if serving else f"HTTP {code}"))
     want_ctx, want_file = prof.get("CTX"), prof.get("MODEL_FILE")
     match = ls.get("ctx") is not None and str(ls.get("ctx")) == str(want_ctx) and ls.get("file") == want_file
@@ -266,6 +272,13 @@ def status():
         cnt = re.search(r'"count"\s*:\s*(\d+)', body)
         add("Services", f"{name} :{port}", "ok" if okk else "fail", f"{cnt.group(1)} memories" if cnt else "",
             "" if okk else "bin/services-up.sh (the watchdog retries every minute)")
+        fl = re.search(r'"failed_24h"\s*:\s*(\d+)', body)
+        if okk and fl:      # same rule as verify.sh: a failed lookup is fail-open, so it would otherwise go unseen
+            last = re.search(r'"last_failure"\s*:\s*"([^"]*)"', body)
+            add("Services", "memory lookups (24 h)", "ok" if fl.group(1) == "0" else "warn",
+                "none failed" if fl.group(1) == "0" else f"{fl.group(1)} failed · last {last.group(1) if last else '?'}",
+                "" if fl.group(1) == "0" else "Those turns ran without long-term memory. Usually right after a model load "
+                "or with every CPU core busy; see rag-proxy.log.")
     shim = c.get("SHIM_PORT", 19080)
     add("Services", f"readiness gate :{shim}", "ok" if port_open(shim) else "fail", "", "" if port_open(shim) else "bin/services-up.sh")
     if voice_installed(c):          # optional add-on: a row only when it's installed
@@ -361,6 +374,8 @@ def status():
     chat_ok = serving and port_open(shim) and gw_code == 200
     if game:
         verdict = ("paused", "Game mode: the model is stopped on purpose.")
+    elif standby:
+        verdict = ("paused", "Not loaded, so the graphics card is free. The model loads with your next chat message (about a minute).")
     elif not chat_ok:
         verdict = ("down", "The agent can't answer right now. Fix the first failing row.")
     elif "fail" in states:
@@ -763,6 +778,7 @@ def security_info():
     img = c.get("SANDBOX_IMAGE", "local-agent-sandbox:1")
     rc, _, _ = run(["docker", "image", "inspect", img], timeout=15)
     return {"profile": c.get("SECURITY_PROFILE", "standard"), "network": c.get("SANDBOX_NETWORK", "off"), "shared": shared,
+            "jina": c.get("JINA_FALLBACK", "off"),
             "image": rc == 0, "workspace": c.get("OPENCLAW_WORKSPACE", "")}
 
 
@@ -816,11 +832,12 @@ JOBS = {
     "overnight-run": lambda d: [os.path.join(BIN, "overnight.sh"), "run"],
     "security-profile": lambda d: [os.path.join(BIN, "security.sh"), "set", d.get("profile") if d.get("profile") in ("protected", "standard") else _bad("profile")],
     "security-network": lambda d: [os.path.join(BIN, "security.sh"), "network", "on" if d.get("value") == "on" else "off"],
+    "security-jina": lambda d: [os.path.join(BIN, "security.sh"), "jina", "on" if d.get("value") == "on" else "off"],
     "security-share-add": lambda d: [os.path.join(BIN, "security.sh"), "share", "add", _safe_arg(d.get("path"), "folder"), "rw" if d.get("mode") == "rw" else "ro"],
     "security-share-remove": lambda d: [os.path.join(BIN, "security.sh"), "share", "remove", _safe_arg(d.get("path"), "folder")],
     "up": lambda d: [os.path.join(BIN, "up.sh")],
     "gateway": lambda d: [os.path.join(BIN, "gateway-up.sh")],
-    "ingest": lambda d: ["bash", "-c", '. "$1/bin/lib.sh" && "$VENV/bin/python3" "$1/services/memory_ingest.py"', "x", REPO],
+    "ingest": lambda d: ["bash", "-c", '. "$1/bin/lib.sh" && "$VENV/bin/python3" "$1/services/memory_ingest.py" -v', "x", REPO],
 }
 job = {"id": 0, "kind": None, "proc": None, "log": None, "started": 0, "rc": None}
 job_lock = threading.Lock()

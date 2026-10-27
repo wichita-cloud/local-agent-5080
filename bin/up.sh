@@ -6,9 +6,14 @@
 #   2. cron (WSL doesn't run systemd here, so install.sh adds `service cron start` to /etc/wsl.conf)
 #   3. the model, only if it isn't already healthy (a reload throws away its warm prompt cache)
 #   4. services, 5. gateway, 6. verify + quick bench (speed is part of "up")
+#
+# --no-model (the Windows sign-in task and the packaged "open my agent" icon): everything except the model, and no bench. The
+# model then loads with the first chat message (services/ready_proxy.py), so a Windows restart always leaves the graphics card
+# free. Game mode stays on if it was on: only Restore or a plain bin/up.sh turns it off.
 set -u
 . "$(dirname "$0")/lib.sh"
 load_profile || exit 1
+NO_MODEL=0; [ "${1:-}" = "--no-model" ] && NO_MODEL=1
 
 # One start-up at a time: two at once (a double click on "Bring everything up", plus a terminal) would each recreate the model
 # container and fight over the GPU. fd 9 is closed for every daemon this starts (7>&- 8>&- 9>&-), so the lock dies with this script.
@@ -27,9 +32,16 @@ log "2/6 cron"
 pgrep -x cron >/dev/null && ok "cron running" || { sudo -n service cron start >/dev/null 2>&1 && ok "cron started" || warn "cron not running: run: sudo service cron start"; }
 
 log "3/6 model"
-rm -f "$GAME_FLAG"
-if llama_healthy && [ "${1:-}" != "--from-game-mode" ]; then ok "model already serving"
-else "$REPO/bin/llama-up.sh" || die "model failed to start (see above)"; fi
+if [ "$NO_MODEL" = 1 ]; then
+  if [ -f "$GAME_FLAG" ]; then ok "game mode is on: the model stays stopped until you use Restore"
+  else ok "not loaded now: it loads with the first message, so the graphics card stays free until then"; fi
+else
+  rm -f "$GAME_FLAG"
+  if llama_healthy && [ "${1:-}" != "--from-game-mode" ]; then ok "model already serving"
+  else "$REPO/bin/llama-up.sh" || die "model failed to start (see above)"; fi
+fi
+# a container made by an older llama-up.sh still has --restart unless-stopped, which reloads it at every Windows sign-in
+docker update --restart no "$LLAMA_CONTAINER" >/dev/null 2>&1 || true
 
 log "4/6 services";  "$REPO/bin/services-up.sh" || warn "a service did not start (see above)"
 log "5/6 gateway"
@@ -42,6 +54,7 @@ if [ "$sbx_drift" = 0 ] && [ "$(curl -s -o /dev/null -w '%{http_code}' -m 5 "htt
 else [ "$sbx_drift" = 1 ] && log "applying the current security and web-search settings"; "$REPO/bin/gateway-up.sh" || warn "gateway did not start"; fi
 
 log "6/6 verify"
+[ "$NO_MODEL" = 1 ] && { ok "skipped (bin/verify.sh checks everything at any time)"; exit 0; }
 "$REPO/bin/bench.sh" --quick
 # take the guard's first reading now (cron only does it every 5 minutes, and a fresh install would show a false "has not measured")
 "$REPO/guards/decode-floor.sh" >/dev/null 2>&1 || true
@@ -50,6 +63,11 @@ log "6/6 verify"
 # the last thing a new user sees should say what to do next, not a check summary
 echo
 if [ "$vrc" -eq 0 ]; then printf '%s══ Ready ══%s\n' "$C_G" "$C_0"; else printf '%s══ Started, but something above failed (see the FAIL lines) ══%s\n' "$C_R" "$C_0"; fi
+# started from a Windows icon (the packaged installer sets LOCAL_AGENT_ICONS=1): name the icons, not shell commands
+if [ -n "${LOCAL_AGENT_ICONS:-}" ]; then
+  [ "$vrc" -eq 0 ] && echo "  Open your agent with its icon on the desktop. After a Windows restart, use \"Start the agent\" in the Start menu."
+  exit "$vrc"
+fi
 cat <<TXT
 
   1. Open a browser on Windows (Chrome or Edge) and go to this address to chat with your agent:

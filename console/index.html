@@ -426,6 +426,15 @@ details.adv{margin-top:8px}details.adv summary{font-size:13px;color:var(--mut)}
         and searching work either way (they don't run inside the sandbox).</p>
       <label style="display:flex;gap:8px;align-items:center;font-weight:400;margin:0"><input type="checkbox" id="secNet" style="width:auto"> Allow commands in the sandbox to use the internet</label>
     </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">Pages that refuse the agent (Jina reader)</h2>
+      <p class="small mut" style="margin-top:-4px">Off by default. Many sites block automated visits (a bot check, a 403, a page built by JavaScript).
+        When this is on, the agent retries such a page once through Jina AI's reader (r.jina.ai), which fetches it on Jina's servers and
+        returns the text. <b>Privacy:</b> Jina, a company, then sees the address of that page and your IP address (and your Jina account,
+        if you put a key in config/secrets.env). Pages the agent reads directly are never sent to Jina. See docs/SECURITY.md.</p>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:400;margin:0"><input type="checkbox" id="secJina" style="width:auto"> Retry refused pages through Jina AI (sends those page addresses to Jina)</label>
+    </div>
   </div>
 
   <div class="card">
@@ -624,7 +633,7 @@ async function startJob(kind, extra = {}) {
   try { await api("/api/job", {kind, ...extra}); } catch (e) { toast(e.message); return; }
   jobOffset = 0; $("#actLog").textContent = ""; $("#activity").hidden = false; $("#activity").classList.remove("min");
   $("#actTitle").textContent = {bench: "Benchmark", verify: "Full verify", switch: "Switching model", download: "Downloading model",
-    up: "Bringing everything up", gateway: "Restarting the agent", ingest: "Re-indexing notes", tune: "Applying model settings", "voice-install": "Installing voice", "voice-use": "Changing the agent's voice", "overnight-test": "Testing the overnight job", "searxng-up": "Setting up SearXNG", "searxng-down": "Stopping SearXNG", "overnight-run": "Running the overnight job", "security-profile": "Changing the security profile", "security-network": "Changing sandbox internet access", "security-share-add": "Sharing a folder", "security-share-remove": "Removing a shared folder"}[kind] || kind;
+    up: "Bringing everything up", gateway: "Restarting the agent", ingest: "Re-indexing notes", tune: "Applying model settings", "voice-install": "Installing voice", "voice-use": "Changing the agent's voice", "overnight-test": "Testing the overnight job", "searxng-up": "Setting up SearXNG", "searxng-down": "Stopping SearXNG", "overnight-run": "Running the overnight job", "security-profile": "Changing the security profile", "security-network": "Changing sandbox internet access", "security-jina": "Changing the Jina reader setting", "security-share-add": "Sharing a folder", "security-share-remove": "Removing a shared folder"}[kind] || kind;
   setJobButtons(true); pollJob();
 }
 async function pollJob() {
@@ -1079,6 +1088,7 @@ async function loadSecurity() {
     ? (s.image ? "The agent is running in the sandbox." : '<span style="color:var(--bad)">The sandbox image isn\'t built, so the agent can\'t run commands. Choose Protected again to build it.</span>')
     : '<span style="color:var(--warn)">Standard: the agent can read and change anything your WSL account can, including your Windows drives.</span>';
   $("#secNet").checked = s.network === "on";
+  $("#secJina").checked = s.jina === "on";
   $("#secShared").innerHTML = s.shared.length ? s.shared.map(x => `<div class="model"><div><div class="name mono" style="font-weight:500">${esc(x.path)}</div>
       <div class="small mut">${x.mode === "rw" ? "the agent may read and change files here" : "read-only"} · inside the sandbox: <span class="mono">${esc(x.inside)}</span>${x.exists ? "" : ' · <b style="color:var(--bad)">folder not found</b>'}</div></div>
       <div class="btns" style="margin-top:0"><button class="b needsidle" data-secrm="${esc(x.path)}">Stop sharing</button></div></div>`).join("")
@@ -1092,6 +1102,7 @@ $("#secAdd").onclick = () => { const p = $("#secPath").value.trim(); if (!p) ret
   if ($("#secMode").value === "rw" && !confirm("Let the agent change and delete files in this folder? Read-only is safer.")) return;
   startJob("security-share-add", {path: p, mode: $("#secMode").value}); $("#secPath").value = ""; };
 $("#secNet").onchange = () => startJob("security-network", {value: $("#secNet").checked ? "on" : "off"});
+$("#secJina").onchange = () => startJob("security-jina", {value: $("#secJina").checked ? "on" : "off"});
 document.addEventListener("click", e => { const b = e.target.closest("[data-secrm]"); if (b && confirm("Stop sharing this folder with the agent?")) startJob("security-share-remove", {path: b.dataset.secrm}); });
 $("#secAudit").onclick = async () => { const o = $("#secAuditOut"), b = $("#secAudit"); b.disabled = true; o.hidden = false; o.textContent = "Checking…";
   try { o.textContent = (await api("/api/security/audit")).text; } catch (e) { o.textContent = e.message; } b.disabled = false; };

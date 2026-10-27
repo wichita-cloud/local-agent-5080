@@ -22,6 +22,9 @@ hint() { printf '        → %s\n' "$*"; }
 layer() { printf '\n%s── %s ──%s\n' "$C_C" "$*" "$C_0"; }
 
 layer "1 WSL ↔ GPU"
+if (cd /mnt/c 2>/dev/null; timeout 20 cmd.exe /c ver </dev/null >/dev/null 2>&1); then pass "Windows programs run from WSL (interop)"
+else fail "Windows programs cannot run from WSL (interop is off)"
+     hint "docs/TROUBLESHOOTING.md: 'Exec format error' (usually another WSL distro booted with systemd)"; fi
 [ -e /dev/dxg ] && pass "/dev/dxg present" || { fail "/dev/dxg missing: WSL has no GPU"; hint "update WSL (wsl --update) and the NVIDIA driver"; }
 if ( timeout 30 nvidia-smi -L ) >/dev/null 2>&1; then pass "nvidia-smi works inside WSL"
 else fail "nvidia-smi fails inside WSL"; hint "usually stale driver libs after a Windows driver update: wsl --shutdown, then reopen"; fi
@@ -36,14 +39,20 @@ else fail "containers cannot see the GPU"; hint "if layer 1 failed too, fix that
 layer "3 Model server"
 st=""; docker_ok && st=$(docker inspect -f '{{.State.Status}}' "$LLAMA_CONTAINER" 2>/dev/null)
 docker_ok || { fail "cannot inspect the container: Docker unreachable (see layer 2)"; st=skip; }
+# Not loaded (after a Windows restart, or a crash) is normal: the readiness gate loads it with the next chat message.
+# Don't count it, and don't send the chat-path probe below, which would load it onto the GPU.
+standby=0
 case "$st" in
   skip) ;;
   running) pass "container $LLAMA_CONTAINER running" ;;
-  "") fail "container $LLAMA_CONTAINER does not exist"; hint "bin/llama-up.sh" ;;
+  exited|created|"") if [ -f "$GAME_FLAG" ]; then fail "container $LLAMA_CONTAINER is ${st:-missing} (game mode)"; hint "bin/gpu-restore.sh"
+       else standby=1; warn "model not loaded (graphics card free). It loads with the next chat message, or bin/up.sh. Not counted"; fi ;;
   *) fail "container $LLAMA_CONTAINER is $st"; hint "bin/llama-up.sh (game mode? bin/gpu-restore.sh)" ;;
 esac
-if curl -s -m 20 "http://127.0.0.1:$LLAMA_PORT/v1/models" 2>/dev/null | grep -q "\"$MODEL_ALIAS\""; then pass ":$LLAMA_PORT serves $MODEL_ALIAS"
+if [ "$standby" = 1 ]; then :
+elif curl -s -m 20 "http://127.0.0.1:$LLAMA_PORT/v1/models" 2>/dev/null | grep -q "\"$MODEL_ALIAS\""; then pass ":$LLAMA_PORT serves $MODEL_ALIAS"
 else fail ":$LLAMA_PORT is not serving $MODEL_ALIAS"; fi
+if [ "$standby" = 0 ]; then
 cmdline=$(docker inspect "$LLAMA_CONTAINER" --format '{{join .Config.Cmd " "}}' 2>/dev/null)
 srv_ctx=$(echo "$cmdline" | grep -oE -- '-c [0-9]+' | grep -oE '[0-9]+')
 srv_file=$(echo "$cmdline" | grep -oE -- '-m /models/[^ ]+' | sed 's#-m /models/##')
@@ -52,6 +61,7 @@ else fail "running config (-c ${srv_ctx:-?}, ${srv_file:-?}) ≠ profile ${PROFI
 splits=$(docker logs "$LLAMA_CONTAINER" 2>&1 | grep -oE 'graph splits = [0-9]+' | tail -1 | grep -oE '[0-9]+$')
 if [ -n "$splits" ] && [ "$splits" -le 4 ]; then pass "graph splits = $splits (model fully on GPU)"
 else caution "graph splits = ${splits:-unknown} (expect ~2): part of the model is not on the GPU" "replies will be much slower than expected"; hint "KV_ARGS must be q8_0/q8_0; check free VRAM; docs/TUNING.md"; fi
+fi
 
 layer "4 Services"
 for s in "memory-service:$MEMORY_PORT:/health" "rag-proxy:$RAG_PORT:/health"; do
@@ -59,6 +69,15 @@ for s in "memory-service:$MEMORY_PORT:/health" "rag-proxy:$RAG_PORT:/health"; do
   if curl -s -m 10 "http://127.0.0.1:$port$path" 2>/dev/null | grep -q '"status" *: *"ok"'; then pass "$n (:$port)"
   else fail "$n (:$port) not healthy"; hint "bin/services-up.sh (the watchdog restarts it within ~1 min if cron is running)"; fi
 done
+# A memory lookup that fails doesn't stop the turn (fail open), so without this nobody would know recall was missing.
+rh=$(curl -s -m 5 "http://127.0.0.1:$RAG_PORT/health" 2>/dev/null)
+rf=$(printf '%s' "$rh" | grep -oE '"failed_24h": *[0-9]+' | grep -oE '[0-9]+$')
+if [ -n "$rf" ]; then
+  if [ "$rf" = 0 ]; then pass "memory lookups: none failed in the last 24 h"
+  else caution "memory lookups: $rf failed in the last 24 h (last: $(printf '%s' "$rh" | grep -oE '"last_failure": *"[^"]*"' | cut -d'"' -f4))" \
+         "on those turns the agent answered without its long-term memory (it was told, and says it couldn't check)"
+       hint "grep FAILED $STATE_DIR/rag-proxy.log; slow lookups usually follow a model load or a fully busy CPU"; fi
+fi
 port_listening "$SHIM_PORT" && pass "ready-proxy (:$SHIM_PORT) listening" || { fail "ready-proxy (:$SHIM_PORT) down"; hint "bin/services-up.sh"; }
 if [ -f "$VOICE_VENV/.installed" ]; then   # optional add-on: only checked when installed
   vs=$(curl -s -m 5 "http://127.0.0.1:$VOICE_PORT/health" 2>/dev/null | grep -oE '"status": *"[a-z]+"' | grep -oE '[a-z]+"$' | tr -d '"')
@@ -77,7 +96,8 @@ if [ -f "$VOICE_VENV/.stt-installed" ]; then   # speech-to-text half of the voic
   esac
 fi
 # end-to-end through the same chain the agent uses
-if curl -s -m 90 "http://127.0.0.1:$SHIM_PORT/v1/chat/completions" -H 'Content-Type: application/json' \
+if [ "$standby" = 1 ]; then warn "chat path not probed: the probe would load the model. Not counted"
+elif curl -s -m 90 "http://127.0.0.1:$SHIM_PORT/v1/chat/completions" -H 'Content-Type: application/json' \
      -d "{\"model\":\"$MODEL_ALIAS\",\"messages\":[{\"role\":\"user\",\"content\":\"ok\"}],\"max_tokens\":1}" 2>/dev/null | grep -q '"choices"'; then
   pass "chat path answers (gate → memory proxy → model)"
 else fail "chat path did not answer through :$SHIM_PORT"; fi
@@ -86,6 +106,7 @@ layer "5 Agent (OpenClaw)"
 code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 "http://127.0.0.1:$GATEWAY_PORT/" 2>/dev/null)
 [ "$code" = 200 ] && pass "gateway :$GATEWAY_PORT HTTP 200" || { fail "gateway :$GATEWAY_PORT HTTP ${code:-none}"; hint "bin/gateway-up.sh"; }
 cw=$(openclaw config get models.providers.ollama.models 2>/dev/null | grep -oE '"?contextWindow"?: *[0-9]+' | grep -oE '[0-9]+$' | head -1)
+[ "$standby" = 1 ] && srv_ctx=${CTX:-}   # not loaded: compare with the profile it will load
 if [ -n "$cw" ] && [ "$cw" = "${srv_ctx:-x}" ]; then pass "OpenClaw contextWindow $cw = llama -c"
 else fail "OpenClaw contextWindow ${cw:-?} ≠ llama -c ${srv_ctx:-?}"; hint "bin/gateway-up.sh rewrites it from the profile"; fi
 if [ -x "$REPO/patches/openclaw-$OPENCLAW_VERSION/apply.sh" ]; then
@@ -111,6 +132,15 @@ if [ "${OVERNIGHT:-off}" = on ]; then
   if [ -z "${BRAVE_API_KEY:-}${TAVILY_API_KEY:-}" ] && [ -z "$(docker ps -q --filter name=local-agent-searxng 2>/dev/null)" ]; then
     warn "overnight work has no web search set up (SearXNG, Tavily or Brave): ideas will come from your notes only. Not counted"
   fi
+fi
+# Empty files the agent wrote. A write that loses its data still reports success (the Protected profile did exactly this
+# until patch 13), so read the result: a 0-byte note or project file means something wiped it. HEARTBEAT.md ships empty.
+WS="${OPENCLAW_WORKSPACE:-$HOME/.openclaw/workspace}"
+if [ -d "$WS" ]; then
+  empty=$(find "$WS" -maxdepth 3 -type f -name '*.md' -size 0 ! -name HEARTBEAT.md ! -path "$WS/.openclaw/*" 2>/dev/null)
+  if [ -z "$empty" ]; then pass "agent's notes and files: none empty"
+  else caution "$(echo "$empty" | wc -l) of the agent's files are EMPTY: $(echo "$empty" | sed "s#^$WS/##" | head -5 | paste -sd' ')" "what the agent saved there is gone; ask it to write them again"
+       hint "patches/openclaw-$OPENCLAW_VERSION/apply.sh --check (patch 13 fixes sandboxed writes); docs/TROUBLESHOOTING.md"; fi
 fi
 
 layer "6 GPU memory (the silent 6x slowdown)"
@@ -157,6 +187,17 @@ if [ -f "$m" ] && [ $(( $(date +%s) - $(stat -c %Y "$m") )) -le 1800 ]; then pas
 elif [ ! -f "$m" ] && [ -f "$inst" ] && [ $(( $(date +%s) - $(stat -c %Y "$inst") )) -le 900 ]; then
   warn "decode guard hasn't run yet (guards installed $(( ($(date +%s) - $(stat -c %Y "$inst")) / 60 )) min ago; it runs every 5 min). Not counted"
 else caution "decode guard has not measured in 30+ min (cron down or script broken)" "a slowdown would not be reported"; fi
+# backups: the newest must be complete and less than 2 days old (bin/backup.sh, cron 02:40)
+if [ -f "$STATE_DIR/backup.last" ]; then
+  read -r bt bres bdir < "$STATE_DIR/backup.last"
+  bage=$(( ($(date +%s) - bt) / 3600 ))
+  if [ "$bres" = COMPLETE ] && [ "$bage" -le 48 ]; then pass "last backup complete, ${bage} h ago ($(basename "$bdir"))"
+  elif [ "$bres" != COMPLETE ]; then caution "the last backup was INCOMPLETE ($(basename "$bdir"))" "a wiped or damaged file could not be restored from it"; hint "cat $bdir/MANIFEST.txt; bin/backup.sh"
+  else caution "no backup for ${bage} hours" "a wiped or damaged file could not be restored"; hint "bin/backup.sh (cron runs it at 02:40: is cron running?)"; fi
+else warn "no backup yet (the first one runs tonight at 02:40, or now: bin/backup.sh). Not counted"; fi
+# memory recall check (services/memory_eval.py, nightly): alarms when recall falls well below its usual level
+if [ -f "$STATE_DIR/memory-eval.ALARM" ]; then caution "memory recall dropped: $(cat "$STATE_DIR/memory-eval.ALARM")" "the agent recalls fewer of its memories than usual"; hint "tail $STATE_DIR/memory-eval.jsonl; docs/MEMORY.md"
+elif [ -f "$STATE_DIR/memory-eval.jsonl" ]; then pass "memory recall check: $(tail -1 "$STATE_DIR/memory-eval.jsonl" | grep -oE '"hit3": *[0-9.]+' | grep -oE '[0-9.]+$')% found in the top 3"; fi
 [ -f "$GAME_FLAG" ] && { caution "game mode is ON" "the GPU is freed for gaming and the agent is offline until you restore it"; hint "bin/gpu-restore.sh"; }
 # A repair loop that keeps failing is a stuck state, not a retry. The watchdog stops after 3 failed restarts in an
 # hour and logs STUCK; without this check nobody would see that line.

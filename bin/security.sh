@@ -5,6 +5,8 @@
 #   bin/security.sh choose [--no-apply]        asks the install question (what bin/install.sh runs)
 #   bin/security.sh set protected|standard     switch profile (builds the sandbox image the first time, restarts the agent)
 #   bin/security.sh network on|off             may commands inside the sandbox use the internet? (default off)
+#   bin/security.sh jina on|off                retry pages that refuse the agent through Jina AI's reader (default off;
+#                                              privacy: Jina then sees those page addresses and your IP; docs/SECURITY.md)
 #   bin/security.sh share list
 #   bin/security.sh share add <folder> [ro|rw] let the agent use one more folder (read-only by default)
 #   bin/security.sh share remove <folder>
@@ -48,7 +50,9 @@ check_folder() {   # check_folder <path> -> prints the cleaned absolute WSL path
   local p="$1" real
   case "$p" in [A-Za-z]:\\*|[A-Za-z]:/*) p=$(win_to_wsl "$p");; esac
   [[ "$p" == /* ]] || die "give the full path of the folder (for example /mnt/c/Users/you/Plans or C:\\Users\\you\\Plans)"
-  [[ "$p" != *[:\;\|\"\'\`\$]* ]] || die "the folder name has a character that isn't allowed here (: ; | quotes \$)"
+  # : ; | separate entries in SHARED_FOLDERS and docker -v; " ` $ would break the double-quoted value in stack.env.
+  # An apostrophe is safe there, and common in folder names ("Bob's files").
+  [[ "$p" != *[:\;\|\"\`\$]* ]] || die "the folder name has a character that isn't allowed here (: ; | \" \` \$)"
   [ -d "$p" ] || die "no such folder: $p"
   real=$(realpath -e "$p") || die "can't resolve $p"
   case "$real" in
@@ -122,6 +126,11 @@ TXT
   network)
     v="${1:-}"; case "$v" in on|off) ;; *) die "usage: bin/security.sh network on|off";; esac
     setkey SANDBOX_NETWORK "$v"; ok "sandbox internet: $v"; apply ;;
+  jina)
+    v="${1:-}"; case "$v" in on|off) ;; *) die "usage: bin/security.sh jina on|off";; esac
+    setkey JINA_FALLBACK "$v"
+    [ "$v" = on ] && ok "Jina fallback: on. Pages that refuse the agent are fetched through r.jina.ai: Jina sees those addresses and your IP"                   || ok "Jina fallback: off. No page address is sent to Jina"
+    "$REPO/bin/gateway-up.sh" >/dev/null 2>&1 && ok "agent restarted with the new setting" || warn "restart the agent: bin/gateway-up.sh" ;;
   share)
     sub="${1:-list}"; shift || true
     case "$sub" in

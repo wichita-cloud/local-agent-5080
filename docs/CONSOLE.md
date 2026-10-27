@@ -16,7 +16,7 @@ The verdict at the top is one of:
 | **Unconfirmed** | it works, but some checks have no data yet (usually speed: press *Run benchmark*) |
 | **Degraded** | it answers, but something is off: slow decode, spill into system RAM, low free VRAM, a guard alarm |
 | **Down** | the chat path can't answer: fix the first failing row |
-| **Paused** | game mode: the model was stopped on purpose |
+| **Paused** | game mode: the model was stopped on purpose. Or not loaded yet (after a Windows restart): it loads with the next chat message |
 
 The checks run in dependency order (GPU → Docker → model → services → agent → GPU memory → guards → speed). Fix the
 **first** failing row; the rows under it usually fail because of it.
@@ -95,7 +95,7 @@ The agent's personality and rules are plain Markdown files in its workspace (`OP
 - The token counter matters: these files are re-sent every turn. Past ~3,000 tokens the first reply of a session gets
   slower and less room is left for the conversation. Past `BOOTSTRAP_MAX_CHARS` (26,000 characters) per file, the end of
   the file is **silently cut off**; the editor warns you.
-- **Memory** is separate from character: notes the agent writes under `memory/` are indexed nightly (or with the
+- **Memory** is separate from character: notes the agent writes under `memory/` and `projects/` are indexed every 10 minutes (or with the
   *Re-index* button) and recalled automatically. A fresh install starts with none.
 
 ## Voice, Overnight and Security tabs

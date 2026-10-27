@@ -89,6 +89,16 @@ Spilled memory doesn't move back on its own. The model must be restarted after V
 - **WSL memory.** Give WSL 20 GB (`windows/wslconfig.example`). At ~15 GB the Linux OOM killer can take out services every few hours under load.
 - **cron must run.** WSL doesn't start it by itself; `install.sh` adds it to `/etc/wsl.conf`. Without cron, no guard runs and
   nothing self-heals, while everything *looks* configured.
+- **A model load evicts the memory service.** Loading a model reads the GGUF through the page cache, which pushed the
+  memory service's memory-mapped weights out of RAM (resident 2.7 → 1.2 GB). The next lookup was 4-8× slower, hit the
+  memory proxy's timeout, and the turn ran with no memories: the model said it didn't know a stored fact, with nothing in
+  any check. The service now copies its weights into private RAM (~1.6 GB; `MEM_PIN=0` to skip), the proxy retries a
+  timed-out lookup once, a failed lookup tells the model, and `verify.sh` counts failures. Measured on 264 memories, first
+  lookup after reading a 14 GB file: 1.07 s before, 0.22-0.27 s after. With all 16 cores busy a lookup still takes
+  4-6 s; the retry covers that.
+- **Never fail silently on the chat path.** A dropped connection reads as a blank reply, and a skipped memory lookup reads
+  as forgetting. The readiness gate answers a turn it can't serve with a 503 and a message (game mode: at once; model
+  still loading: after `READY_TIMEOUT`, 240 s, which covers a cold 27B load of 144-185 s; it used to cut turns off at 45 s).
 
 ## What repairs itself (broken on purpose, then timed)
 These were each tested on a clean install by killing the part and waiting; times are from the kill to healthy again. A once-a-minute
@@ -100,18 +110,25 @@ watchdog (`guards/services-watchdog.sh`, cron) does the repairs and gives up aft
 | The gateway is killed | the watchdog restarts it | 21 s |
 | A service hangs (port open, nothing answering) | probed on the next tick, then killed and restarted | about 2.5 min |
 | The SearXNG container is stopped or killed by hand | the watchdog starts it again (Docker's own restart policy ignores a manual stop); the agent's web search keeps pointing at it | 28 s |
-| The whole Ubuntu is stopped (`wsl --terminate`, or a WSL restart) | cron starts at boot and the watchdog brings every service back; the model and SearXNG stay up because Docker keeps them | about 85 s, with nobody typing |
+| The whole Ubuntu is stopped (`wsl --terminate`, or a WSL restart) | cron starts at boot and the watchdog brings every service back; the model and SearXNG stay up because they run in Docker (after a full `wsl --shutdown` the model loads again with the next chat message) | about 85 s, with nobody typing |
 | OpenClaw's settings file is damaged | `bin/gateway-up.sh` keeps the damaged file, restores OpenClaw's newest valid backup, or rebuilds from `config/stack.env` if there is none | seconds |
 | Two `bin/up.sh` at once | the second stops with a message instead of fighting over the GPU | immediate |
 | Logs grow for months | `guards/trim-logs.sh` (daily) cuts any log over 5 MB to its newest 1 MB; Docker keeps at most 3 x 20 MB of the model's log | daily |
 | You update (`git pull`, then `bin/install.sh`) | your answers and settings are kept, new guard jobs are added, nothing is asked again | about 5 s |
 
 **Not automatic: a Windows restart.** WSL does not start by itself, so after Windows restarts nothing runs until you open Ubuntu
-and run `bin/up.sh`. To have it done at sign-in, run `windows\Autostart.ps1 -Install` once (add `-DryRun` first to see exactly what it
-adds; `-Remove` undoes it). It starts the model, so it takes the GPU at sign-in; use Game Mode when you want the GPU back.
+and run `bin/up.sh`. To have it done at sign-in, run `powershell -ExecutionPolicy Bypass -File windows\Autostart.ps1 -Install` once (add `-DryRun` first to see exactly what it
+adds; `-Remove` undoes it). It starts everything **except the model**.
+
+**A Windows restart always frees the graphics card.** The model container is created with `--restart no`, so Docker Desktop
+never reloads it at sign-in, and the sign-in task (`bin/up.sh --no-model`) doesn't load it either. The model loads when the
+first chat message arrives: the readiness gate starts it and holds that message while it loads (about a minute), so nothing
+is lost. That makes a restart the sure answer for anyone whose Game Mode didn't free the card. (Before this, the container had
+`--restart unless-stopped` and came back at every sign-in, so a restart did *not* free the card.)
 
 **The model is never restarted by the watchdog.** A stopped model may be deliberate (Game Mode), and starting it into a full GPU makes
-it spill (see above). Restart it with `bin/up.sh`.
+it spill (see above). It is started only by a chat message (never in Game Mode; `bin/llama-up.sh` still refuses a GPU without
+room for it, and the message then gets a reply saying the graphics card is busy), by `bin/up.sh`, or by Restore.
 
 ## When you need more headroom
 In order of cost:
