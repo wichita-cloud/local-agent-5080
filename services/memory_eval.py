@@ -12,8 +12,8 @@ last 7 runs, $STATE_DIR/memory-eval.ALARM is written and bin/verify.sh reports i
 
 What this catches: a damaged index, a changed or mismatched embedding model, a ranking change that hides memories,
 recall getting worse as the store grows. It is a self-recall test (each memory's own words), so it measures the
-machinery, not whether the agent understands a reworded question. The original system ran a check like this daily and
-it is how its silent recall regressions were found.
+machinery, not whether the agent understands a reworded question. A check like this, run daily, is what
+catches a recall regression that nothing else reports.
 
 It holds the memory service's query lock for one lookup at a time (~0.3-1.5 s each), so it runs at night and skips
 itself while the model is answering someone.

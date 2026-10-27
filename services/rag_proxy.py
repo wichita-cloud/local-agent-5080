@@ -45,7 +45,7 @@ REL_THRESHOLD = 0.5    # cosine relevance floor; below this a "memory" is noise
 TOP_K         = 3
 MEM_CHARS     = 240    # each memory is trimmed to its gist
 MEM_N         = 40     # asks for 40, so the service searches a pool of 200 (n*5). With n=8 (pool 40), a memory was found
-                       # from its own opening only 61% of the time on an 85k-memory store; 74% at 40, same median latency
+                       # from its own opening only 61% of the time on a large store; 74% at 40, same median latency
                        # (the reranker still scores only the top 20). Only TOP_K of them are injected either way.
 QUERY_CHARS   = 500
 MEM_TIMEOUT   = 2.5    # BGE-M3 embed + rerank of ~20k memories takes ~1.3-1.4 s warm on a 9900X

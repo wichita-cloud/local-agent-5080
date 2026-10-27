@@ -20,7 +20,7 @@ section FOUND (shown to the agent when you ask about it), WEAK (stored, but rank
 
 Write notes that work: one topic per section; the key fact, names and numbers in the **first sentence** (the agent sees
 the start of a memory, not all of it); headings that are phrases you would ask about ("When the water heater was
-replaced"), not bare labels. Measured on the original system: a note that mixes several topics in one section is found
+replaced"), not bare labels. Measured: a note that mixes several topics in one section is found
 only by its first topic, and a bare 4-word heading can fail where a full first sentence is found every time.
 
 - **Changed a note?** Drop it again under the same name. The old version's memories are retired, so old and new never

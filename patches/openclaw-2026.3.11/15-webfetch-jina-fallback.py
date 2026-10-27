@@ -3,9 +3,9 @@
 
 Why: many sites refuse automated fetches (Cloudflare's bot check, a 403, a page built by JavaScript), so the agent gets
 an error instead of the page. Jina's Reader fetches the page on its own servers, renders it, and returns clean text.
-The original system used this for months: it turned most of those failures into readable pages.
+Measured on 2026-10-26: it turned 4 of 8 such refusals into the real page (docs/SECURITY.md).
 
-PRIVACY, which is why it is off unless you switch it on (JINA_FALLBACK=on in config/stack.env, or the Setup option):
+PRIVACY, which is why it is off unless you switch it on (JINA_FALLBACK=on in config/stack.env, or the console's Security tab):
   * Jina AI (a company, jina.ai) receives the address of every page that needed the retry, together with your IP
     address, and fetches that page itself. Pages the agent reads directly are never sent to Jina.
   * With JINA_API_KEY in config/secrets.env, the requests are also tied to your Jina account (the key raises Jina's

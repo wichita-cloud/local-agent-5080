@@ -113,8 +113,7 @@ Nothing else reports home: usage statistics are switched off for every component
 `DO_NOT_TRACK`, `HF_HUB_DISABLE_TELEMETRY`, ChromaDB's `anonymized_telemetry=False`), and the memory models stay offline
 after their first download.
 
-**About the Jina option.** Jina's Reader turns a page that blocks automated visits into readable text, which is why the
-original system used it. But Jina then knows which pages your agent wanted and from which IP address, and Jina's own
+**About the Jina option.** Jina's Reader turns a page that blocks automated visits into readable text. But Jina then knows which pages your agent wanted and from which IP address, and Jina's own
 policy pages do not say how long Reader requests are kept (they now defer to Elastic's privacy statement). Leave it off
 unless the agent often fails to read pages you need. Switch it in the console's Security tab, or `bin/security.sh jina on|off`.
 Measured 2026-10-26: of 8 home pages that refused a direct fetch (401/403), Jina returned the real page for 4 (Zillow,
@@ -130,7 +129,7 @@ after the same page had worked.
   with a Tor SOCKS proxy such as a `tor` container on 127.0.0.1:9050, and `extra_proxy_timeout`). Expect slower searches
   and fewer results: many engines answer Tor with a CAPTCHA or nothing. Not built in yet.
 - **Later: fetch pages through Tor or a proxy too.** OpenClaw can send `web_fetch` through an HTTP proxy from the
-  environment; the original system did this with two small patches (forcing the environment proxy and skipping a DNS
+  environment; it takes two small patches (forcing the environment proxy and skipping a DNS
   pre-check that fails behind a proxy). Pointing that at a local Tor proxy would hide your IP from websites. Not built in.
 - **Later: no third party for blocked pages.** Jina's Reader is open source (Apache-2.0) and can run locally in Docker,
   as can alternatives such as Crawl4AI. A local reader renders JavaScript pages without telling anyone else what you

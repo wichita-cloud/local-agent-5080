@@ -7,8 +7,8 @@ Reads the agent's workspace folders memory/ (its notes), projects/ and knowledge
 
 Splitting: one memory per section (a markdown heading and the text under it), long sections cut at paragraph
 boundaries into pieces of up to ~800 characters, each piece starting with its document title and heading. One memory
-per section, because a memory that blends several topics is found only by its first one (measured on the original
-system: a 3-topic note was retrievable by its first topic only).
+per section, because a memory that blends several topics is found only by its first one (measured: a 3-topic
+note was retrievable by its first topic only).
 
 Each memory carries metadata "path" (the file, relative to the workspace), so the store knows where it came from:
   * new or changed text is stored. Text already stored is NOT embedded again (skip_existing: an id lookup), so a run

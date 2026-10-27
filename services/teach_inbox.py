@@ -15,7 +15,7 @@ with done\\<file>.log showing the per-section result, and one line is added to r
   * A file that can't be taught (wrong type, empty, unreadable) moves to failed\\ with a .log saying why.
   * A file still being copied is left alone until it has not changed for 25 seconds.
 
-Write notes the agent can use (measured on the original system): one topic per section, and put the key claim, names and
+Write notes the agent can use (measured): one topic per section, and put the key claim, names and
 numbers in the FIRST sentence of each section. Recall injects only the first 240 characters of a memory, and a heading
 that is a phrase you would actually ask about is found far more reliably than a bare 3-4 word label.
 """

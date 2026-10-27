@@ -16,7 +16,7 @@
 # Not backed up, because they can be downloaded again: the model files, Python/Node programs, Docker images.
 #
 # Every archive is listed and checksummed after it is written: a backup that reports success without reading back what
-# it wrote is worthless (on the original system a 0-byte "success" wiped files on both sides of a sync). A backup with
+# it wrote is worthless (a 0-byte write that reports success can wipe a file, and a sync then spreads it). A backup with
 # any FAIL line is marked INCOMPLETE, exits 1, and never causes older backups to be deleted.
 #
 # Restore never destroys anything: it first takes a "pre-restore" backup of how things are now, and
