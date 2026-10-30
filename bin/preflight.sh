@@ -18,6 +18,7 @@ CFG="$REPO/config/stack.env"
 DONE="$STATE_DIR/install.complete"
 # an earlier install (its Python environment exists) or a finished one: its own services legitimately hold these ports
 if [ -f "$DONE" ] || [ -x "$VENV/bin/python3" ]; then ok "preflight: this stack is already installed here, nothing to check"; exit 0; fi
+"$REPO/bin/model.sh" recommend   # first install only: the default model for this PC
 
 interactive() { can_ask; }
 setkey() { sed -i "/^$1=/d" "$CFG"; printf '%s="%s"\n' "$1" "$2" >> "$CFG"; }

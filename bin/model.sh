@@ -4,7 +4,9 @@
 #   bin/model.sh list              profiles, with the active one marked and whether its file is present
 #   bin/model.sh current           active profile and what llama is actually serving
 #   bin/model.sh use <profile>     switch: set ACTIVE_MODEL, relaunch llama, rewrite OpenClaw config, restart gateway, bench
-#   bin/model.sh download <profile>  fetch the profile's files: model, vision projector, MTP layer (resumable,
+#   bin/model.sh recommend         the default model for this PC (Bolt 74B with 32 GB RAM, else the 27B); on a fresh
+#                                  install it also makes it the active one, once
+#   bin/model.sh download [profile]  fetch the profile's files: model, vision projector, MTP layer (resumable,
 #                                    checks disk space on WSL *and* C:)
 #   bin/model.sh tune <profile> k=v  adjust sampling / context / thinking for that profile only (--reset to undo)
 #
@@ -52,6 +54,22 @@ case "$cmd" in
     rm -f "$STATE_DIR/llama-draining"
     "$REPO/bin/gateway-up.sh" || die "gateway restart failed"
     "$REPO/bin/bench.sh" --quick ;;
+  recommend)
+    # The Bolt 74B keeps ~7 GB of experts in system RAM: it needs a 32 GB PC (Windows shows 31.x GB). WSL's own MemTotal
+    # can't tell, since .wslconfig caps it, so ask Windows; if Windows can't be asked, the 27B. This picks the active
+    # model only on a fresh install, and only once (MODEL_PICKED in config/stack.env): a choice already made, by the
+    # Windows installer or by `use`, is never overridden.
+    ramgb=$(powershell.exe -NoProfile -Command '[math]::Floor((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory/1GB)' 2>/dev/null | tr -dc 0-9)
+    rec=qwen3.5-27b-iq4xs; [ "${ramgb:-0}" -ge 30 ] && rec=nemotron-3.5-bolt-74b-128k
+    cfg="$REPO/config/stack.env"
+    [ -f "$cfg" ] || cp "$REPO/config/stack.env.example" "$cfg"
+    if grep -q '^MODEL_PICKED=' "$cfg" || [ -f "$STATE_DIR/install.complete" ]; then
+      ok "recommended for this PC (${ramgb:-?} GB RAM): $rec. Active: $ACTIVE_MODEL"
+      if [ "$rec" != "$ACTIVE_MODEL" ]; then echo "        to switch: bin/model.sh download $rec, then bin/model.sh use $rec"; fi
+    else
+      sed -i "s/^ACTIVE_MODEL=[^ #]*/ACTIVE_MODEL=$rec/" "$cfg"; echo 'MODEL_PICKED=auto' >> "$cfg"
+      ok "default model for this PC (${ramgb:-?} GB RAM): $rec"
+    fi ;;
   download)
     # Fetch everything the profile needs into MODEL_DIR. Resumable (re-run continues a broken download):
     #   * the model (MODEL_URL)
@@ -61,7 +79,7 @@ case "$cmd" in
     #     (other profiles use it) and never modified.
     # Disk check covers BOTH filesystems: WSL's ext4 lives in a .vhdx on the Windows drive, so a download that
     # fits "inside" WSL can still fill C:. A full C: can corrupt the WSL disk, which is much worse than a failed download.
-    new="${2:-}"; [ -n "$new" ] || die "usage: bin/model.sh download <profile>"
+    new="${2:-$ACTIVE_MODEL}"
     load_profile "$new" >/dev/null || exit 1
     [ -n "${MODEL_URL:-}" ] || die "profile $new has no MODEL_URL. Download the file by hand (docs/MODELS.md)"
     mkdir -p "$MODEL_DIR"
@@ -180,5 +198,5 @@ case "$cmd" in
     "$REPO/bin/gateway-up.sh" || die "gateway restart failed"
     "$REPO/bin/bench.sh" --quick ;;
   bench) "$REPO/bin/bench.sh" "${@:2}" ;;
-  *) die "usage: bin/model.sh list|current|use <profile>|download <profile>|tune <profile> k=v…|bench" ;;
+  *) die "usage: bin/model.sh list|current|recommend|use <profile>|download [profile]|tune <profile> k=v…|bench" ;;
 esac

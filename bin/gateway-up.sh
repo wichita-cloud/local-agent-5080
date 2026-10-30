@@ -7,6 +7,7 @@
 #     compaction and sends prompts the server refuses. If smaller, it wastes context.
 #   * provider "ollama" with api=openai-completions pointed at the readiness gate: this is the path the
 #     tool-call patches hook into, and it streams properly (the Ollama-native API path returned empty replies).
+#   * compaction reserve: OpenClaw's flat 20000 condensed a 32k conversation at 12.7k, nearly every turn.
 #   * bootstrapMaxChars: the default 20000 silently truncates long instruction files (AGENTS.md etc.) each turn.
 #   * userTimezone: without it, timestamps are UTC and the agent says "good morning" at 9 pm.
 #   * a pinned auth token: a regenerated token makes the browser lose its pairing ("token mismatch").
@@ -55,6 +56,10 @@ oc gateway.port "$GATEWAY_PORT"
 oc models.providers.ollama "{\"baseUrl\":\"http://127.0.0.1:$SHIM_PORT/v1\",\"apiKey\":\"local-no-key\",\"api\":\"openai-completions\",\"models\":[{\"id\":\"$MODEL_ALIAS\",\"name\":\"$MODEL_ALIAS\",\"api\":\"openai-completions\",\"maxTokens\":$MAX_REPLY_TOKENS,\"contextWindow\":$CTX,\"input\":$INPUT,\"cost\":{\"input\":0,\"output\":0,\"cacheRead\":0,\"cacheWrite\":0}}]}"
 oc agents.defaults.model "ollama/$MODEL_ALIAS"
 oc agents.defaults.bootstrapMaxChars "$BOOTSTRAP_MAX_CHARS"
+# When to condense the conversation (lib.sh explains the numbers). Both reserve keys: OpenClaw uses the larger one.
+oc agents.defaults.compaction.reserveTokens "$COMPACTION_RESERVE_TOKENS"
+oc agents.defaults.compaction.reserveTokensFloor "$COMPACTION_RESERVE_TOKENS"
+oc agents.defaults.compaction.keepRecentTokens "$COMPACTION_KEEP_TOKENS"
 [ -n "${USER_TIMEZONE:-}" ] && oc agents.defaults.userTimezone "$USER_TIMEZONE"
 oc tools.web.fetch.enabled true
 # The agent's web_search: Brave if you gave a key; otherwise the local SearXNG container (no account, no card) through

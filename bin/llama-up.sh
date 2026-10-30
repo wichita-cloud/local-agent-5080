@@ -90,7 +90,9 @@ for i in $(seq 1 300); do
   if llama_healthy; then
     ok "serving after ${i}s"
     splits=$(docker logs "$LLAMA_CONTAINER" 2>&1 | grep -oE 'graph splits = [0-9]+' | tail -1 | grep -oE '[0-9]+$')
-    if [ -n "$splits" ] && [ "$splits" -gt 4 ]; then
+    if printf '%s' "$EXTRA_ARGS" | grep -q -- '--n-cpu-moe'; then
+      ok "graph splits not checked: this profile keeps experts in system RAM by design (bin/bench.sh checks its speed)"
+    elif [ -n "$splits" ] && [ "$splits" -gt 4 ]; then
       warn "graph splits = $splits (expect ~2). Part of the model is running on the CPU. Check KV_ARGS (see docs/TUNING.md: q4_0 V only on the newer build, never q8_0 K with q4_0 V) and free VRAM."
     else
       ok "graph splits = ${splits:-?}"

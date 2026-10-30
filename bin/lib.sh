@@ -59,6 +59,14 @@ load_profile() {   # load_profile [name]: exports the profile's variables
   set +a
   LLAMA_IMAGE="${LLAMA_IMAGE_PROFILE:-$STACK_LLAMA_IMAGE}"
   PROFILE="$name"; export PROFILE LLAMA_IMAGE
+  # OpenClaw condenses a conversation once it passes contextWindow minus a reserve, and its reserve is a flat 20000.
+  # On a 32k window that left 12.7k: barely more than the agent's own ~11k prompt, so it condensed nearly every turn.
+  # Scale the reserve with the window instead (3/8 of it, 12000-20000). Recent messages kept when condensing: a quarter
+  # of the window from 64k, an eighth below (on 32k, 8k kept + the ~11k prompt + a summary was already past the next
+  # condense point, so it condensed 10 times in 8 turns). rag_proxy.py repeats the reserve formula; change both together.
+  local r=$((CTX * 3 / 8)); [ "$r" -lt 12000 ] && r=12000; [ "$r" -gt 20000 ] && r=20000
+  local k=$((CTX / 4)); [ "$CTX" -lt 65536 ] && k=$((CTX / 8)); [ "$k" -gt 20000 ] && k=20000
+  export COMPACTION_RESERVE_TOKENS="$r" COMPACTION_KEEP_TOKENS="$k"
 }
 
 # Image understanding: the profile names a vision projector (MMPROJ_FILE) and the file is fully downloaded.

@@ -34,6 +34,13 @@ rc=0
 read -r _ _ dn dms <<<"$(run "$tmp/small.json" 200)"
 [ -n "${dms:-}" ] || { echo "decode test returned nothing"; exit 2; }
 lim=$(awk -v e="$EXPECT_DECODE_MS" 'BEGIN{print e*1.5}')
+# The first request after a load is slower while weights page in (Bolt 74B: 37.5 ms, then 22). One retry before warning,
+# so a fresh switch doesn't report a spill that isn't there; a real spill stays slow on the second run too.
+if ! awk -v a="$dms" -v l="$lim" 'BEGIN{exit !(a<=l)}'; then
+  log "decode ${dms} ms/token on the first run; measuring again (the first request after a load is slower)"
+  read -r _ _ dn2 dms2 <<<"$(run "$tmp/small.json" 200)"
+  [ -n "${dms2:-}" ] && { dn=$dn2; dms=$dms2; }
+fi
 if awk -v a="$dms" -v l="$lim" 'BEGIN{exit !(a<=l)}'; then ok "decode ${dms} ms/token over $dn tokens (expect ~${EXPECT_DECODE_MS})"
 else warn "decode ${dms} ms/token, expected ~${EXPECT_DECODE_MS}. Likely VRAM spill: run windows\\gpu-check.ps1; see docs/STABILITY.md"; rc=1; fi
 

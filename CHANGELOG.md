@@ -3,6 +3,44 @@
 What changed, and why. Every fix here was found by running the stack, not by reading code alone; the "found" notes say
 how. Newest first. Dates are UTC.
 
+## 2026-10-30
+
+### Conversations
+- **Long conversations are condensed, and saved to memory first, now.** OpenClaw never asks a non-OpenAI server for
+  token counts, so every reply was recorded as 0 tokens: it never knew the conversation was filling up, so it never
+  saved memory or condensed, and a long chat ran until the model refused it. The memory proxy now asks llama for the
+  counts on OpenClaw's behalf. Found when a test chat reached 41k tokens on a 32k window with nothing condensed. Proven
+  on a fresh clone through the dashboard's path, on a real 32k window: 8 personal facts in a chat that was condensed 6
+  times; 7 were saved to memory before condensing and the agent listed all 8 at the end. (`services/rag_proxy.py`)
+- **The condense point now scales with the context size.** OpenClaw's flat 20k reserve and 20k of kept messages fit a
+  32k window badly: condensing kept almost everything (29.8k before, 30.1k after), so the next turn would have overflowed.
+  It is now 3/8 of the window (12k-20k), keeping a quarter of the window from 64k and an eighth below: a 32k chat
+  condenses at 20.5k and stays under 28k (with a quarter kept it condensed 10 times in 8 turns).
+  128k and 64k profiles are unchanged. Measured on a throwaway 32k session, old against new settings.
+  (`bin/lib.sh`, `bin/gateway-up.sh`)
+- **A warning before a conversation is condensed.** At 75% of the way the agent adds one line saying so; at 90% it saves
+  the work to `projects/<name>.md` with numbered places to resume, and lists them. Reply with a number, or say
+  "continue <project>" in a new chat. The size is llama's last prompt, so right after /new (still the old chat's size)
+  it is estimated from the request instead. (`services/rag_proxy.py`, `characters/default/AGENTS.md`)
+
+### Models
+- **New: NVIDIA Nemotron 3.5 Bolt 74B** (`nemotron-3.5-bolt-74b`, 32k context), NVIDIA's own 2-bit file with the
+  experts of 40 layers in system RAM. Measured on a 5080 with 32 GB RAM and no other WSL distro running: 19.2 ms/token
+  decode, ~1,600-2,200 tok/s reading, all 7 agent tasks and 40/40 short questions, the same as the 27B on the same day.
+  Needs 32 GB RAM and the display on the iGPU; when WSL swaps it slows down 2-3×. Batch size 2048 measured best
+  (+~50% reading over 512). An expert-pruned "16 GB" version was rejected: fast, but it got 27/40 of the questions,
+  inventing facts its tool use had hidden. (docs/MODELS.md)
+- **The Bolt 74B at 128k context is the default on PCs with 32 GB of RAM**; below that it stays the 27B.
+  `bin/model.sh recommend` picks it on a fresh install (once; a choice already made is kept), and the README's manual
+  steps run it before downloading. New profile `nemotron-3.5-bolt-74b-128k`: 8/8 recall at 118k tokens, 21.8-22.6 ms/token
+  in a short chat and ~26 ms deep into a long one, ~950 MB VRAM to spare. The context it can hold was measured from 32k
+  to 256k (table in docs/MODELS.md).
+- **`bin/verify.sh` and `bin/llama-up.sh` no longer report "graph splits" on profiles that keep experts in system RAM
+  by design** (Bolt, 35B-A3B): their graph is always split, and Bolt's llama.cpp build doesn't print the count. `bench.sh` checks their speed.
+- **No false "slow" warning right after loading a model.** The first reply after a load or a long idle spell is slower
+  while the weights are read back in (Bolt: 37.5 ms/token, then 22). `bin/bench.sh` now measures once more before
+  calling it a spill.
+
 ## 2026-10-27
 
 ### Privacy and security

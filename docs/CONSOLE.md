@@ -48,12 +48,14 @@ Shipped profiles:
 
 | Profile | For |
 |---|---|
-| `qwen3.5-27b-iq4xs` (default) | daily agent use; the most stable measured setup on 16 GB |
+| `nemotron-3.5-bolt-74b-128k` (default with 32 GB RAM) | NVIDIA's 74B research and reasoning model, 128k context; as fast as the 27B when WSL has RAM to spare |
+| `qwen3.5-27b-iq4xs` (default below 32 GB RAM) | daily agent use; the most stable measured setup on 16 GB |
 | `qwen3.5-27b-mtp` | fastest (~1.6×), sees images, 32k |
 | `qwen3.5-27b-iq4xs-64k` | 64k context, sees images |
 | `qwen3.5-27b-iq4xs-45k` | older long-context profile, less VRAM headroom |
 | `qwen3-14b-q4km` | about 1.7× faster (12 ms/token, measured), ~3.5 GB VRAM to spare; weaker multi-step tool use |
 | `qwen3.5-35b-a3b-iq4xs` | MoE with some experts on the CPU; more knowledge, less predictable tools |
+| `nemotron-3.5-bolt-74b` | the Bolt 74B at 32k context |
 | `qwen3-8b-q4km` | proving the pipeline works; debugging |
 
 ### Advanced (hidden under each model card)

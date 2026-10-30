@@ -154,4 +154,4 @@ fi
 echo
 touch "$STATE_DIR/install.complete"
 if ls "$MODEL_DIR"/*.gguf >/dev/null 2>&1; then echo "Next: bin/up.sh  (your model is already in $MODEL_DIR)"
-else echo "Next: put your model in $MODEL_DIR (bin/model.sh download <name>, or docs/MODELS.md), then:  bin/up.sh"; fi
+else echo "Next: bin/model.sh download $ACTIVE_MODEL  (the model chosen for this PC; others in docs/MODELS.md), then:  bin/up.sh"; fi

@@ -25,6 +25,15 @@ Design rules (each one prevents a specific failure):
     model to search before saying it doesn't know. The same rule in the system prompt alone was skipped about 1 turn in
     18 ("I don't have information about that game... would you like me to search?"). A note next to the question is
     the same on every request of a turn, so it doesn't disturb the prompt cache. SEARCH_NUDGE=0 turns it off.
+  * CONTEXT WARNING. OpenClaw condenses ("compacts") a conversation when it nears the context window minus a reserve
+    (12k-20k tokens, set by gateway-up.sh from the window size). Nobody knows that is coming, so at 75% of that point
+    the model is told to add one line saying so, and at 90% to save the project to projects/<name>.md with numbered
+    resume options and list them for the user. Size comes from llama's /slots (the previous request's real prompt
+    size). The note is decided once per user message and reused for the whole turn, so it never changes mid-turn and
+    the prompt cache stays valid.
+    CONTEXT_WARN=0 turns it off.
+  * TOKEN COUNTS. Streaming requests get stream_options.include_usage (OpenClaw doesn't ask a non-OpenAI server for it),
+    so OpenClaw knows how full the conversation is and condenses it, and saves memory first, before the window fills.
   * The injection is ephemeral: it is added in flight and never saved into the agent's history.
 
 Kill switch: create $STATE_DIR/rag-proxy.disable for a pure passthrough.
@@ -58,6 +67,21 @@ SEARCH_NUDGE = os.environ.get("SEARCH_NUDGE", "1") != "0"
 SEARCH_NOTE = ("(Automatic note: you have web_search. If the answer could depend on anything recent or anything you are "
                "not sure of, call web_search first, before writing anything. Do not say you have no information and do "
                "not offer to search: search.)")
+CONTEXT_WARN = os.environ.get("CONTEXT_WARN", "1") != "0"
+def compaction_reserve(n_ctx):
+    """The reserve gateway-up.sh gives OpenClaw for this window (the formula is in bin/lib.sh load_profile)."""
+    return min(20000, max(12000, n_ctx * 3 // 8))
+CTX_NOTE_SOON = ("(Automatic note: this conversation has used about {pct}% of the room it has before older messages "
+                 "are condensed. After your answer, add one short line telling the user this, and that the important "
+                 "points will be saved first.)")
+CTX_NOTE_NOW = ("(Automatic note: this conversation is about to be condensed ({pct}% of the room used); older details "
+                "will be summarized. Before answering, save the work: write or update projects/<short-topic-name>.md "
+                "with the goal, key findings with their sources, decisions, open questions, next steps, and a "
+                "'Resume options' list of 2-4 concrete places to pick up. Then answer. End your reply with a short "
+                "warning that the conversation is about to be condensed, name the file the progress is saved in, and "
+                "list the resume options numbered, so the user can reply with a number now or say "
+                "'continue <project>' in a new chat.)")
+_ctx_notes = collections.OrderedDict()   # hash of the user message -> the note chosen for its turn
 HOP_BY_HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
               "te", "trailers", "transfer-encoding", "upgrade", "content-length"}
 
@@ -173,6 +197,41 @@ def has_tool(payload, name):
     return False
 
 
+def context_note(msgs, idx, qtext, blen=0):
+    """The context warning for this turn, or "". Decided on the turn's first request and reused after."""
+    if not CONTEXT_WARN:
+        return ""
+    key = hash((idx, qtext[:2000]))   # the user message's position and text: the same on every request of its turn
+    if key in _ctx_notes:
+        return _ctx_notes[key]
+    if msgs[-1].get("role") != "user":   # a tool-loop request of a turn we didn't see start: stay quiet
+        return ""
+    note = ""
+    try:
+        s = requests.get(UPSTREAM + "/slots", timeout=1).json()[0]
+        n_ctx = int(s.get("n_ctx") or 0)
+        used = int(s.get("n_prompt_tokens") or 0) + len(qtext) // 4
+        # /slots holds the PREVIOUS request's size, which can belong to another conversation (right after /new it
+        # was 28.9k for a chat that had 13.5k). A request can't hold more tokens than a third of its bytes in any
+        # mostly-Latin text, so a bigger count is stale: estimate from this request instead.
+        if blen and used > blen // 3:
+            used = blen // 4
+        room = n_ctx - compaction_reserve(n_ctx)
+        # A small window is mostly the agent's own ~11k fixed prompt: warning there would fire on every turn,
+        # so it only applies when the room left is big enough to mean something (a 32k window leaves ~20k).
+        if n_ctx and room >= 20000 and used > 0:
+            pct = min(99, int(100 * used / room))
+            note = CTX_NOTE_NOW.format(pct=pct) if pct >= 90 else CTX_NOTE_SOON.format(pct=pct) if pct >= 75 else ""
+            if note:
+                log("context %d%% of %d before compaction: %s" % (pct, room, "save+options" if pct >= 90 else "warn"))
+    except Exception:
+        pass   # fail open: no /slots, no warning
+    _ctx_notes[key] = note
+    while len(_ctx_notes) > 50:
+        _ctx_notes.popitem(last=False)
+    return note
+
+
 def maybe_inject(body):
     try:
         payload = json.loads(body)
@@ -191,6 +250,8 @@ def maybe_inject(body):
         if failed:
             block = FAIL_NOTE.format(why=failed)
         nudge = SEARCH_NOTE if SEARCH_NUDGE and has_tool(payload, "web_search") else ""
+        cnote = context_note(msgs, idx, qtext, len(body))
+        nudge = "\n\n".join(x for x in (nudge, cnote) if x)
         if not block and not nudge:
             return body, "no-hits"
         prefix = (block + "\n\n---\n\n") if block else ""
@@ -209,6 +270,22 @@ def maybe_inject(body):
         return body, "inject-error"
 
 
+def ask_for_usage(body):
+    """Ask llama to end each streamed reply with its token counts (stream_options.include_usage).
+
+    OpenClaw 2026.3.11 never asks for them from a non-OpenAI server, so every reply was recorded as 0 tokens and
+    OpenClaw never knew how full the conversation was: it did not condense or save memory before the window filled up.
+    Its parser reads the counts whenever they arrive, so asking on its behalf is enough. Fails open."""
+    try:
+        payload = json.loads(body)
+        if not payload.get("stream") or "include_usage" in (payload.get("stream_options") or {}):
+            return body
+        payload["stream_options"] = dict(payload.get("stream_options") or {}, include_usage=True)
+        return json.dumps(payload).encode("utf-8")
+    except Exception:
+        return body
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -218,10 +295,12 @@ class Handler(BaseHTTPRequestHandler):
     def _proxy(self, method):
         n = int(self.headers.get("Content-Length", 0) or 0)
         body = self.rfile.read(n) if n else b""
-        if method == "POST" and self.path.endswith("/v1/chat/completions") and not os.path.exists(DISABLE_FLAG):
-            body, note = maybe_inject(body)
-            if note.startswith("injected"):
-                log(note)
+        if method == "POST" and self.path.endswith("/v1/chat/completions"):
+            body = ask_for_usage(body)
+            if not os.path.exists(DISABLE_FLAG):
+                body, note = maybe_inject(body)
+                if note.startswith("injected"):
+                    log(note)
         hdrs = {k: v for k, v in self.headers.items() if k.lower() not in HOP_BY_HOP and k.lower() != "host"}
         hdrs["Content-Length"] = str(len(body))
         try:

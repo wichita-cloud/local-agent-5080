@@ -59,7 +59,10 @@ srv_file=$(echo "$cmdline" | grep -oE -- '-m /models/[^ ]+' | sed 's#-m /models/
 if [ -n "$srv_ctx" ] && [ "$srv_ctx" = "${CTX:-}" ] && [ "$srv_file" = "${MODEL_FILE:-}" ]; then pass "running config matches profile $PROFILE (-c $CTX, $MODEL_FILE)"
 else fail "running config (-c ${srv_ctx:-?}, ${srv_file:-?}) ≠ profile ${PROFILE:-?} (-c ${CTX:-?}, ${MODEL_FILE:-?})"; hint "bin/model.sh use ${ACTIVE_MODEL}"; fi
 splits=$(docker logs "$LLAMA_CONTAINER" 2>&1 | grep -oE 'graph splits = [0-9]+' | tail -1 | grep -oE '[0-9]+$')
-if [ -n "$splits" ] && [ "$splits" -le 4 ]; then pass "graph splits = $splits (model fully on GPU)"
+# A profile that keeps experts in system RAM on purpose (--n-cpu-moe: Bolt 74B, 35B-A3B) always splits the graph, and
+# Bolt's build doesn't print the count at all; bench.sh's speed check is what proves those healthy.
+if printf '%s' "${EXTRA_ARGS:-}" | grep -q -- '--n-cpu-moe'; then pass "graph splits not checked: this profile keeps experts in system RAM by design (bin/bench.sh checks its speed)"
+elif [ -n "$splits" ] && [ "$splits" -le 4 ]; then pass "graph splits = $splits (model fully on GPU)"
 else caution "graph splits = ${splits:-unknown} (expect ~2): part of the model is not on the GPU" "replies will be much slower than expected"; hint "KV_ARGS must be q8_0/q8_0; check free VRAM; docs/TUNING.md"; fi
 fi
 

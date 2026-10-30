@@ -17,8 +17,8 @@ It is built for the common retail configuration: Ryzen 9 9900X (with integrated 
 32 GB RAM and Windows 11, running WSL2. It will work on similar machines; the numbers in the docs were
 measured on that one.
 
-> **The one trade-off: for the 27B, your monitor runs off the motherboard.** Running the 27B at 4-bit entirely on the
-> 5080 needs the whole card. If the 5080 also draws your Windows desktop, that takes about 0.5 GB of its memory, which
+> **The one trade-off: for the default models, your monitor runs off the motherboard.** The Bolt 74B and the 27B each
+> need the whole 5080. If the 5080 also draws your Windows desktop, that takes about 0.5 GB of its memory, which
 > is enough to push part of the model into system RAM and make replies **about 6× slower**, with no error message. So
 > Windows runs on the **motherboard's video output** (the Ryzen's built-in graphics) and the 5080 is left to the model.
 >
@@ -62,8 +62,8 @@ measured on that one.
 
 | | |
 |---|---|
-| Default model | Qwen3.5-27B (dense), IQ4_XS quant, 32k context, fully on the GPU |
-| Speed (measured) | ~20 ms/token decode (~50 tok/s); ~1,650 tok/s prompt reading |
+| Default model, 32 GB RAM | NVIDIA's Nemotron 3.5 Bolt 74B, a research and reasoning model, **128k context**, part of it in system RAM; ~22 ms/token (~45 tok/s), ~1,450-1,900 tok/s reading ([docs/MODELS.md](docs/MODELS.md#nemotron-35-bolt-74b)) |
+| Default model, less RAM | Qwen3.5-27B (dense), IQ4_XS quant, 32k context, fully on the GPU; ~20 ms/token decode (~50 tok/s), ~1,650 tok/s reading |
 | Faster: MTP profile | the same 27B with its multi-token-prediction layer: **~12 ms/token (~80 tok/s) for chat, ~130 tok/s for file edits**, same answers, 32k context (`qwen3.5-27b-mtp`; [docs/MODELS.md](docs/MODELS.md)) |
 | Longer: 64k profile | the same 27B at **64k context** with 4-bit cache, same chat speed ([docs/MODELS.md](docs/MODELS.md)) |
 | Sees images | the 64k and MTP profiles read photos and screenshots you send; the image encoder runs on the CPU, so it costs no GPU memory |
@@ -77,7 +77,7 @@ measured on that one.
 | Your own character | the agent's name, personality and rules are plain Markdown files you edit in the console. It ships neutral |
 | Memory | Local BGE-M3 embeddings and a reranker on the CPU; relevant memories are added to each turn automatically |
 | Reliability | A layered verifier (`bin/verify.sh`), cron guards that detect silent GPU spill, and a "game mode" that frees the GPU |
-| The trade-off | for the 27B, Windows runs on the motherboard's video output so the model gets the whole card; or run the 14B/8B with the monitor on the 5080 ([see above](#local-agent-5080)) |
+| The trade-off | for the Bolt 74B and the 27B, Windows runs on the motherboard's video output so the model gets the whole card; or run the 14B/8B with the monitor on the 5080 ([see above](#local-agent-5080)) |
 
 ---
 
@@ -108,7 +108,7 @@ Test it by asking the agent to "search the web for today's top science news".
    desktop on one screen only (Win+P; see the trade-off note at the top). It is the single most important step; see [docs/STABILITY.md](docs/STABILITY.md) for why (it's a 6× speed difference).
    If the motherboard output shows nothing, enable the iGPU in the BIOS (often called "Integrated Graphics: Force/Enabled").
    **No integrated graphics?** Some CPUs have none (for example many Intel "F" models and some AMD chips). Then the desktop has to
-   use the 5080, which costs about 0.5 GB of VRAM: pick the 14B or 8B model instead of the 27B (see [docs/STABILITY.md](docs/STABILITY.md)).
+   use the 5080, which costs about 0.5 GB of VRAM: pick the 14B or 8B model instead of the Bolt 74B or the 27B (see [docs/STABILITY.md](docs/STABILITY.md)).
    **Moving the cable is not enough on its own:** apps that already held the 5080 keep their GPU memory until they restart.
    After moving the monitor, run `windows\set-igpu-preference.ps1` (a normal PowerShell; it keeps Chrome, Edge and WebView2 on the
    integrated GPU), then close those apps or reboot. Check the result in step 4.
@@ -130,7 +130,8 @@ cd ~/local-agent-5080
 cp config/stack.env.example config/stack.env        # edit if you want different ports or paths
 cp config/secrets.env.example config/secrets.env    # optional keys (web search); chmod 600 it
 chmod 600 config/secrets.env
-bin/model.sh download qwen3.5-27b-iq4xs           # the default model, ~14 GB from Hugging Face; resumable
+bin/model.sh recommend      # picks the default model for this PC: the Bolt 74B with 32 GB RAM, otherwise the 27B
+bin/model.sh download       # downloads it from Hugging Face (Bolt ~21 GB, 27B ~14 GB); resumable
 ```
 Other models, and how to check a file you downloaded by hand: [docs/MODELS.md](docs/MODELS.md).
 
@@ -232,10 +233,14 @@ It must not be used to:
 
 The maintainers do not endorse or support misuse and will not assist with it.
 
-**Models.** By default, this tool uses Qwen3.5-27B ([Qwen/Qwen3.5-27B](https://huggingface.co/Qwen/Qwen3.5-27B), in a
-GGUF quantization by [mradermacher](https://huggingface.co/mradermacher/Qwen3.5-27B-i1-GGUF)), licensed under the
+**Models.** By default, this tool uses NVIDIA Nemotron 3.5 Bolt 74B-A9B on PCs with 32 GB of RAM
+([nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB-GGUF](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB-GGUF),
+licensed under the [OpenMDW License 1.1](https://openmdw.ai/license/1-1)), and otherwise Qwen3.5-27B
+([Qwen/Qwen3.5-27B](https://huggingface.co/Qwen/Qwen3.5-27B), in a GGUF quantization by
+[mradermacher](https://huggingface.co/mradermacher/Qwen3.5-27B-i1-GGUF)), licensed under the
 [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). The optional profiles use Qwen3-14B, Qwen3-8B and
-Qwen3.5-35B-A3B (also Apache 2.0), and the optional voice add-on uses
+Qwen3.5-35B-A3B (also Apache 2.0). Model files are downloaded from their publishers' Hugging Face pages, not shipped
+in this repository. The optional voice add-on uses
 [Chatterbox](https://github.com/resemble-ai/chatterbox) by Resemble AI (MIT). Users may configure the tool to load other models.
 Third-party or user-supplied models are not provided, reviewed, or endorsed
 by the maintainers. Users are responsible for complying with those models'
