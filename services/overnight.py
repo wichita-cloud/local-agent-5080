@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""overnight.py: use the GPU while you're away. Researches your project topics and brings you a few ideas each morning.
+"""overnight.py: scheduled research. In hours the user chooses, while the PC is idle, researches their project topics
+and leaves a few suggestions to keep or discard.
 
 Run by cron every 10 minutes as `overnight.py tick` (guards/overnight-tick.sh). A tick does nothing unless ALL of these hold:
   * it is switched on (OVERNIGHT=on) and the clock is inside your window (OVERNIGHT_START..OVERNIGHT_END, local time)
@@ -16,7 +17,7 @@ What a run does (all of it optional: whatever has nothing to work on is skipped)
   3. Searches the web for them with whichever provider is set up (see below), within a hard budget: OVERNIGHT_SEARCHES_PER_NIGHT per night
      and OVERNIGHT_MONTHLY_SEARCH_LIMIT per month, counted here. Stops on the first quota error. Reads the top page of each.
   4. Writes 3-5 ideas (what, why it fits your notes, a first step, sources) to workspace/overnight/<date>.md and to the
-     console's Overnight tab. Ideas are NOT added to the agent's memory until you press Keep.
+     console's Research tab. Ideas are NOT added to the agent's memory until you press Keep.
 
 Search providers (OVERNIGHT_SEARCH = auto | tavily | searxng | brave; auto picks the first that is set up, in that order):
   * tavily   hosted, email sign-up, NO credit card, 1,000 free searches a month (TAVILY_API_KEY in config/secrets.env)
@@ -440,7 +441,7 @@ def memory_check(deadline, quick=False):
 def research_and_ideas(c, night, deadline, test=False):
     context, nfiles = gather_context(c)
     if not context and not c["topics"]:
-        return {"status": "nothing to work on", "detail": "no recent notes and no topics. Write a few topics in the Overnight tab, or let the agent keep notes in memory/."}
+        return {"status": "nothing to work on", "detail": "no recent notes and no topics. Write a few topics in the Research tab, or let the agent keep notes in memory/."}
     focus = ("The person's own description of what to research:\n<topics>\n%s\n</topics>\n\n" % c["topics"]) if c["topics"] else ""
     raw = ask(SYSTEM, "Task: topics.\n%sRecent notes:\n<notes>\n%s\n</notes>\n\nPick %d specific things worth researching on the web to help this "
               "person's projects (a concrete question each, not a broad subject). Return JSON: [{\"topic\":\"short title\",\"query\":\"a web search query\"}]"

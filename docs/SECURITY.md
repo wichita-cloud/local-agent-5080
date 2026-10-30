@@ -106,7 +106,7 @@ The model, your chats, your notes and your memories never leave the PC. These do
 | Your web-search words | the public search engines SearXNG asks (it sends no cookies and no account) | each web search |
 | The address of each page the agent reads | that website | each `web_fetch` |
 | The address of a page that refused the agent | **Jina AI** (owned by Elastic since October 2025), and your Jina account if you set a key | only with the Jina option on (`JINA_FALLBACK=on`, off by default) |
-| Overnight-research search words | Tavily or Brave, tied to your API key | only if you set one up (docs/OVERNIGHT.md) |
+| Scheduled-research search words | Tavily or Brave, tied to your API key | only if you set one up (docs/OVERNIGHT.md) |
 | Downloads: models, programs, Docker images | Hugging Face, GitHub, npm, PyPI, Docker registries, Ubuntu | install, updates, a model download |
 
 Nothing else reports home: usage statistics are switched off for every component that has them (`bin/lib.sh` sets

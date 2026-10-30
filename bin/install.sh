@@ -9,7 +9,7 @@
 #   6. default character files (only where none exist yet)
 #   7. guard cron entries
 #   8. security profile: asks how much of your PC the agent may touch (Protected sandbox is recommended)
-#   9. overnight research (optional, BETA): asks whether to switch it on (default: no)
+#   9. scheduled research (optional, BETA): asks whether to switch it on (default: no)
 # Docker Desktop, the NVIDIA driver and .wslconfig are Windows-side; see README step 0.
 set -u
 . "$(dirname "$0")/lib.sh"
@@ -114,25 +114,25 @@ else
   "$REPO/bin/security.sh" choose --no-apply || warn "security choice incomplete; run bin/security.sh choose"
 fi
 
-log "9/9 overnight research (optional, BETA)"
+log "9/9 scheduled research (optional, BETA)"
 if grep -q '^OVERNIGHT=' "$REPO/config/stack.env" 2>/dev/null; then
   ok "already chosen (OVERNIGHT=$(sed -n 's/^OVERNIGHT=//p' "$REPO/config/stack.env" | tr -d '"'))"
 elif can_ask; then
   cat >/dev/tty <<'TXT'
 
-Overnight research (BETA, optional): while you're away, the agent can use the idle GPU to research the projects in
-your notes and have a few ideas ready each morning. It only reads your notes and writes suggestions to a separate folder;
-nothing enters its memory unless you keep an idea. Web research needs a search option; there are ones that need no card (next question).
-You can switch it on or off any time in the console's Overnight tab.
+Scheduled research (BETA, optional; for desktop PCs that stay on, not laptops): in hours you choose, while the PC is
+idle, the GPU researches the projects in your notes and leaves a few suggestions for you. It only reads your notes and
+writes suggestions to a separate folder; nothing enters its memory unless you keep a suggestion. Web research needs a search option; there are ones that need no card (next question).
+You can switch it on or off any time in the console's Research tab.
 
 TXT
-  printf 'Turn on overnight research now? [y/N]: ' >/dev/tty; read -r a </dev/tty || a=n
+  printf 'Turn on scheduled research now? [y/N]: ' >/dev/tty; read -r a </dev/tty || a=n
   case "$a" in
     [yY]*)
-      "$REPO/bin/overnight.sh" set OVERNIGHT on && ok "overnight research is on (01:00-06:00; change it in the Overnight tab)"
+      "$REPO/bin/overnight.sh" set OVERNIGHT on && ok "scheduled research is on (01:00-06:00; change the hours in the Research tab)"
       cat >/dev/tty <<'TXT'
 
-How should it search the web? (It works without, from your notes only. You can change this later in the Overnight tab.)
+How should it search the web? (It works without, from your notes only. You can change this later in the Research tab.)
   1) SearXNG on this PC   no account, no key, no card; runs a small Docker container (about 380 MB)
   2) Tavily               sign up with an email, no card, 1,000 free searches a month (you paste a key later)
   3) Brave                needs a payment card on file for its monthly credit
@@ -140,15 +140,15 @@ How should it search the web? (It works without, from your notes only. You can c
 TXT
       printf 'Choose 1-4 [1]: ' >/dev/tty; read -r b </dev/tty || b=1
       case "${b:-1}" in
-        2) "$REPO/bin/overnight.sh" set OVERNIGHT_SEARCH tavily >/dev/null; echo "Get a free key at tavily.com, then paste it in the console's Overnight tab (docs/OVERNIGHT.md).";;
+        2) "$REPO/bin/overnight.sh" set OVERNIGHT_SEARCH tavily >/dev/null; echo "Get a free key at tavily.com, then paste it in the console's Research tab (docs/OVERNIGHT.md).";;
         3) "$REPO/bin/overnight.sh" set OVERNIGHT_SEARCH brave >/dev/null; echo "How to get a Brave key: docs/OVERNIGHT.md.";;
         4) ;;
-        *) "$REPO/bin/searxng.sh" up || warn "SearXNG didn't start; you can set it up later in the console's Overnight tab";;
+        *) "$REPO/bin/searxng.sh" up || warn "SearXNG didn't start; you can set it up later in the console's Research tab";;
       esac ;;
-    *) "$REPO/bin/overnight.sh" set OVERNIGHT off >/dev/null; ok "overnight research stays off" ;;
+    *) "$REPO/bin/overnight.sh" set OVERNIGHT off >/dev/null; ok "scheduled research stays off" ;;
   esac
 else
-  "$REPO/bin/overnight.sh" set OVERNIGHT off >/dev/null; ok "overnight research stays off (unattended install; switch it on in the console's Overnight tab)"
+  "$REPO/bin/overnight.sh" set OVERNIGHT off >/dev/null; ok "scheduled research stays off (unattended install; switch it on in the console's Research tab)"
 fi
 
 echo

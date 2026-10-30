@@ -1,12 +1,16 @@
-# Overnight work: put the GPU to use while you're away
+# Scheduled research: put an idle GPU to work
 
 > **BETA.** New, lightly tested, and off by default. It only *reads* your notes and writes suggestions to a separate folder, but expect rough edges and changes. It was tested with a stand-in search service and made-up notes, not yet with a real search key over many nights. Tell us what breaks (see the README's Contact section).
 
-Your RTX 5080 sits idle while you sleep. This optional job uses it to research what you're working on and have a few ideas
-ready in the morning. It's switched **off** by default; turn it on in the console's **Overnight** tab, or in `config/stack.env`.
+Most of the day an RTX 5080 does nothing. This optional job gives it work: in hours you choose, while nobody is using the
+PC, it researches what you're working on and leaves a few suggestions for you to keep or discard. Less work for you, more
+for the GPU. It's switched **off** by default; turn it on in the console's **Research** tab, or in `config/stack.env`.
+
+**It's meant for desktop PCs that stay on.** It keeps the graphics card busy for up to a few hours, which a desktop is
+built for. On a laptop it means heat, fan noise and battery drain, so leave it off there.
 
 ## What it does
-1. **Waits until you're away.** A check runs every 10 minutes (cron, `guards/overnight-tick.sh`) and does nothing unless all of
+1. **Waits until the PC is idle.** A check runs every 10 minutes (cron, `guards/overnight-tick.sh`) and does nothing unless all of
    these hold: it's switched on; the clock is inside your window; tonight's run hasn't finished; **game mode is off**; the model
    server is up and not generating; nobody has chatted with the agent for `OVERNIGHT_IDLE_MINUTES` (default 10); and no other
    program is using the GPU. It re-checks every 10 minutes, so a game or a late chat just delays it.
@@ -43,7 +47,7 @@ results every time (median 0.9 s), while DuckDuckGo showed a CAPTCHA and Brave's
 It is "free to run, not a guaranteed service": if every engine throttles your PC the job says so in the tab and writes ideas from your notes.
 
 **Tavily** (tavily.com): create a free account with an email address, copy the API key from the dashboard (it starts with `tvly-`),
-paste it in the Overnight tab or put `TAVILY_API_KEY=tvly-...` in `config/secrets.env`. The free plan is 1,000 credits a month without
+paste it in the Research tab or put `TAVILY_API_KEY=tvly-...` in `config/secrets.env`. The free plan is 1,000 credits a month without
 a card (one basic search is one credit); the job stops when Tavily answers that a limit is reached. The Tavily client follows their
 published API and was tested against a stand-in service; test it with your own key before relying on it (press *Test it now*).
 
@@ -59,7 +63,7 @@ published API and was tested against a stand-in service; test it with your own k
 "search for the latest ..." works with no account and no card. Tavily is used by the overnight job only. With none of these the agent can
 still read any page you give it a link to. Your search words go to the public search engines SearXNG asks (the local search service does not log them).
 
-## Settings (the Overnight tab, or `config/stack.env`)
+## Settings (the Research tab, or `config/stack.env`)
 | Setting | Default | Meaning |
 |---|---|---|
 | `OVERNIGHT` | `off` | `on` to enable (the installer asks once; beta) |

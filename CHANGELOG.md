@@ -5,6 +5,20 @@ how. Newest first. Dates are UTC.
 
 ## 2026-10-30
 
+### Windows installer
+- **`BoomerGT-setup.exe`, a setup wizard that does the whole Quick start for you**, now in the repo (`installer/`, source
+  and build script) and attached to each release with its SHA-256. It checks the PC, turns on WSL, installs Docker
+  Desktop (after you accept its license), makes its own Ubuntu, downloads the model chosen for your PC and makes desktop
+  shortcuts; uninstall can keep the agent's memory. Unsigned: Windows will warn, and installer/README.md explains how to
+  check the file. Tested end to end on a fresh Ubuntu: uninstall, install in 18 minutes, 29/29 checks passed.
+
+### Scheduled research (was "overnight work")
+- **Renamed and described for what it is:** the GPU works in hours you choose, while the PC is idle, and leaves
+  suggestions you keep or discard. "Write notes while you sleep" read as something happening behind your back. The
+  console tab is now **Research**; setting names and file names are unchanged, so existing settings keep working.
+- **Meant for desktop PCs.** It keeps the graphics card busy for hours, which a desktop is built for; the docs and the
+  installer now say to leave it off on a laptop (heat, fan noise, battery), and the installer detects a laptop case.
+
 ### Reliability
 - **"Docker did not come up" now says what actually happened when Docker Desktop disconnected your Ubuntu.** Docker
   Desktop removes an Ubuntu from its WSL integration by itself when that Ubuntu is shut down or crashes while Docker is

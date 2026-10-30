@@ -163,7 +163,7 @@ details.adv{margin-top:8px}details.adv summary{font-size:13px;color:var(--mut)}
     <button role="tab" data-tab="models" aria-selected="false">Models</button>
     <button role="tab" data-tab="character" aria-selected="false">Character</button>
     <button role="tab" data-tab="voice" aria-selected="false">Voice</button>
-    <button role="tab" data-tab="overnight" aria-selected="false">Overnight</button>
+    <button role="tab" data-tab="overnight" aria-selected="false">Research</button>
     <button role="tab" data-tab="security" aria-selected="false">Security</button>
   </nav>
 </div></header>
@@ -306,11 +306,11 @@ details.adv{margin-top:8px}details.adv summary{font-size:13px;color:var(--mut)}
 <!-- ═══════════════════════════════ VOICE ═══════════════════════════════ -->
 <section id="tab-overnight" hidden>
   <div class="card">
-    <h2 style="margin-top:0">Put the GPU to work while you're away <span class="tag w" style="vertical-align:middle">BETA</span></h2>
+    <h2 style="margin-top:0">Scheduled research: put an idle GPU to work <span class="tag w" style="vertical-align:middle">BETA</span></h2>
     <p class="small" style="margin-top:-2px;color:var(--warn)"><b>New and lightly tested.</b> It only reads your notes and writes suggestions to a separate folder, but expect rough edges. Off unless you switch it on.</p>
-    <p class="small" style="margin-top:-4px">While you sleep or are out, the agent can research the things you're working on and have a few ideas ready in the morning.</p>
+    <p class="small" style="margin-top:-4px">In hours you choose, while nobody is using the PC, the agent researches the things you're working on and leaves a few suggestions for you to keep or discard. Meant for desktop PCs that stay on; on a laptop, leave it off (heat, fan noise, battery).</p>
     <ol class="small" style="line-height:1.65;margin:8px 0 0">
-      <li><b>It waits until you're away:</b> inside the hours you choose, with no game running, nobody chatting with the agent for a while, and the model free.</li>
+      <li><b>It waits until the PC is idle:</b> inside the hours you choose, with no game running, nobody chatting with the agent for a while, and the model free.</li>
       <li><b>It picks what to research</b> from your recent notes and the topics you write below, and checks that its memory still finds things (a report only: it changes nothing).</li>
       <li><b>It searches the web within a hard budget</b> (searches per night and per month, below), reads the top page of each, and writes 3 to 5 ideas with sources.</li>
       <li><b>You decide what stays.</b> Ideas wait here. Press <i>Keep</i> to add one to the agent's memory; nothing goes in on its own.</li>
@@ -1030,7 +1030,7 @@ async function loadOvernight(keepForm) {
   chip($("#ovSearxTag"), o.providers.searxng, "running", "not set up"); chip($("#ovTavTag"), o.providers.tavily, "key saved", "no key");
   if (!keepForm) $("#ovProv").value = o.search_pref || "auto";
   let st;
-  if (!s.on) st = "Off. Switch it on and choose your hours; it only works while you're away.";
+  if (!s.on) st = "Off. Switch it on and choose your hours; it only works while the PC is idle.";
   else if (o.running) st = "Working right now…";
   else if (o.done_tonight) st = `Done for tonight (${esc(s.start)}–${esc(s.end)}). Ideas are below.`;
   else if (o.in_window) st = o.waiting ? `Inside tonight's window (${esc(s.start)}–${esc(s.end)}), waiting: ${esc(o.waiting)}.` : `Inside tonight's window (${esc(s.start)}–${esc(s.end)}); it starts at the next 10-minute check.`;

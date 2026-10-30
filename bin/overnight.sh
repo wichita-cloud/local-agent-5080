@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# overnight.sh: settings and control for the overnight job (docs/OVERNIGHT.md). The console's Overnight tab calls these.
+# overnight.sh: settings and control for the overnight job (docs/OVERNIGHT.md). The console's Research tab calls these.
 #
 #   bin/overnight.sh status                  JSON: settings, last run, search usage, memory-check history
 #   bin/overnight.sh set <KEY> <VALUE>       OVERNIGHT on|off, OVERNIGHT_START / OVERNIGHT_END (HH:MM, local time),

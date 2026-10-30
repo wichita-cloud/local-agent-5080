@@ -71,7 +71,7 @@ measured on that one.
 | Switching models | one click in the console, or `bin/model.sh use <profile>`; nothing else needs editing |
 | Voice (optional add-on) | talk to the agent with the microphone (local speech-to-text) and hear it answer in a voice you choose or clone from a 10-30 s recording; all local, on spare CPU cores ([docs/VOICE.md](docs/VOICE.md)) |
 | Memory you can manage | its notes become memories within 10 minutes; drop notes into a "Teach my agent" folder and it reports which sections it will recall; outdated memories are retired (with undo); nightly verified backups with a restore command ([docs/MEMORY.md](docs/MEMORY.md)) |
-| Overnight work (optional, **beta**) | while you're away, uses the idle GPU to research your project topics (web searches within a monthly budget you set; works with no account and no card) and have a few ideas ready each morning; you choose the hours and what to keep ([docs/OVERNIGHT.md](docs/OVERNIGHT.md)) |
+| Scheduled research (optional, **beta**, for desktop PCs) | puts the GPU to work in hours you choose while the PC is idle: researches your project topics (web searches within a monthly budget you set; works with no account and no card) and leaves a few suggestions for you to keep or discard ([docs/OVERNIGHT.md](docs/OVERNIGHT.md)) |
 | Safer by default | at install you choose **Protected**: the agent's commands run in a Docker sandbox that sees only its own workspace and the folders you share, where programs it runs have no internet (web search and reading pages still work) and no access to your Windows drives ([docs/SECURITY.md](docs/SECURITY.md)) |
 | Fine-tuning (optional) | hidden under **Advanced** on each model: temperature and other sampling settings, context length, thinking. Each model keeps its own |
 | Your own character | the agent's name, personality and rules are plain Markdown files you edit in the console. It ships neutral |
@@ -82,6 +82,13 @@ measured on that one.
 ---
 
 ## Quick start (about an hour, most of it downloads)
+
+**Easiest: the Windows installer.** Download `BoomerGT-setup.exe` from the
+[latest release](https://github.com/wichita-cloud/local-agent-5080/releases/latest) and run it: a setup wizard does every
+step below for you (WSL, Docker Desktop, its own Ubuntu, the model, shortcuts). It isn't signed, so Windows shows
+"Windows protected your PC": click **More info → Run anyway**, after checking the file's fingerprint as the release page
+explains. What it does, and how to build it yourself: [installer/README.md](installer/README.md). Step 0's monitor advice
+still applies. The steps below are the manual way, and what to read if you want to see how it works.
 
 ### Accounts you'll need
 Only one, and it's optional. There are no cloud model keys and no subscription.
@@ -98,7 +105,7 @@ Only one, and it's optional. There are no cloud model keys and no subscription.
 | Telegram | optional | only if you want to chat with the agent from your phone (send and hear voice notes): a free bot token from @BotFather. See [docs/VOICE.md](docs/VOICE.md) |
 
 **To turn on web search:** sign up at [brave.com/search/api](https://brave.com/search/api/), choose the **Search** plan,
-create an API key, paste it after `BRAVE_API_KEY=` in `config/secrets.env`, then run `bin/gateway-up.sh` (or paste it in the console's Overnight tab). A step-by-step guide, with the pricing caveats, is in [docs/OVERNIGHT.md](docs/OVERNIGHT.md#getting-a-brave-search-api-key-about-5-minutes-optional).
+create an API key, paste it after `BRAVE_API_KEY=` in `config/secrets.env`, then run `bin/gateway-up.sh` (or paste it in the console's Research tab). A step-by-step guide, with the pricing caveats, is in [docs/OVERNIGHT.md](docs/OVERNIGHT.md#getting-a-brave-search-api-key-about-5-minutes-optional).
 Test it by asking the agent to "search the web for today's top science news".
 
 ### 0. Windows prerequisites (one time)
@@ -193,7 +200,7 @@ Full walkthrough: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | [AGENTS.md](AGENTS.md) | Map of the repo and its invariants, for humans and AI coding tools |
 | [CHANGELOG.md](CHANGELOG.md) | What changed in each update, and why (how each problem was found) |
 | [docs/MEMORY.md](docs/MEMORY.md) | How memories are made (every 10 minutes, one per section), teaching it with the "Teach my agent" folder, undoing a retired memory, the nightly recall check, and backups + restore |
-| [docs/OVERNIGHT.md](docs/OVERNIGHT.md) | Optional overnight research: the hours, the search budget, what it does and doesn't do, and how ideas get into memory |
+| [docs/OVERNIGHT.md](docs/OVERNIGHT.md) | Optional scheduled research: the hours, the search budget, what it does and doesn't do, and how ideas get into memory |
 | [docs/VOICE.md](docs/VOICE.md) | Optional voice: install, cloning a voice, recording a clean clip with Audacity, consent and watermarking |
 | [docs/CONSOLE.md](docs/CONSOLE.md) | The web console: what "optimal" means, switching and adding models, editing the character |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Every component, port, file and log, and why each exists |

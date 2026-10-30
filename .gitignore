@@ -13,3 +13,8 @@ __pycache__/
 .venv/
 venv/
 *.log
+
+# installer build output (installer/build.ps1 regenerates all of it)
+installer/dist/
+installer/payload/*
+!installer/payload/engine.ps1

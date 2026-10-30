@@ -42,8 +42,9 @@ Everything is bash and small Python programs. There is no build step, and every 
 | `windows/set-igpu-preference.ps1` | Pins apps (browser and so on) to the integrated GPU. |
 | `windows/wslconfig.example` | The `.wslconfig` this was tested with. |
 | `bin/security.sh`, `docker/sandbox.Dockerfile` | Security profile (Protected sandbox / Standard), shared folders, sandbox network. `gateway-up.sh` applies it every run (docs/SECURITY.md). |
-| `bin/overnight.sh`, `services/overnight.py`, `guards/overnight-tick.sh` | Optional overnight research and ideas (docs/OVERNIGHT.md): cron every 10 min, runs only inside the user's window when the machine is idle, hard search budget, the model gets NO tools, web text is untrusted, nothing enters memory without the user pressing Keep. `overnight.py selftest` runs in CI. Search providers: Tavily, SearXNG (`bin/searxng.sh`, pinned image, loopback, capabilities dropped), Brave. |
+| `bin/overnight.sh`, `services/overnight.py`, `guards/overnight-tick.sh` | Optional scheduled research ("overnight" in file names; docs/OVERNIGHT.md): cron every 10 min, runs only inside the user's window when the machine is idle, hard search budget, the model gets NO tools, web text is untrusted, nothing enters memory without the user pressing Keep. `overnight.py selftest` runs in CI. Search providers: Tavily, SearXNG (`bin/searxng.sh`, pinned image, loopback, capabilities dropped), Brave. |
 | `docs/` | Architecture, stability, tuning, models, troubleshooting, recovery, security, voice. |
+| `installer/` | The Windows setup wizard (`BoomerGT-setup.exe`): C# WinForms (`src/`) driving `payload/engine.ps1`, which does the README's steps from Windows. `build.ps1` packages the committed repo with `git archive` (never local edits). See `installer/README.md`. |
 
 ## Invariants: do not break these without re-measuring
 Breaking any of these causes a failure that is easy to miss. The reasoning is in `docs/TUNING.md` and `docs/STABILITY.md`.

@@ -132,7 +132,7 @@ if [ "$(search_wanted)" = searxng ]; then
 fi
 if [ "${OVERNIGHT:-off}" = on ]; then
   if crontab -l 2>/dev/null | grep -q "$REPO/guards/overnight-tick.sh"; then pass "overnight work: on (${OVERNIGHT_START:-01:00}-${OVERNIGHT_END:-06:00}), cron check installed"
-  else caution "overnight work is on but its 10-minute cron check is missing" "overnight research will not run"; hint "bin/overnight.sh enable-cron"; fi
+  else caution "overnight work is on but its 10-minute cron check is missing" "scheduled research will not run"; hint "bin/overnight.sh enable-cron"; fi
   if [ -z "${BRAVE_API_KEY:-}${TAVILY_API_KEY:-}" ] && [ -z "$(docker ps -q --filter name=local-agent-searxng 2>/dev/null)" ]; then
     warn "overnight work has no web search set up (SearXNG, Tavily or Brave): ideas will come from your notes only. Not counted"
   fi
