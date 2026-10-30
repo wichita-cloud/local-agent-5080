@@ -31,6 +31,7 @@ else fail "nvidia-smi fails inside WSL"; hint "usually stale driver libs after a
 
 layer "2 Docker + GPU hook"
 if docker_ok; then pass "docker reachable"
+elif docker_disconnected; then fail "docker not reachable: Docker Desktop runs, but has disconnected this Ubuntu"; hint "$(docker_fix_hint)"
 else fail "docker not reachable"; hint "start Docker Desktop; Settings → Resources → WSL integration → this distro"; fi
 # --entrypoint is required: the image's entrypoint is llama-server, so a bare `nvidia-smi` becomes a llama arg
 if timeout 120 docker run --rm --gpus all --entrypoint nvidia-smi "$LLAMA_IMAGE" -L >/dev/null 2>&1; then pass "containers can see the GPU"

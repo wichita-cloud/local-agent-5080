@@ -5,6 +5,13 @@ how. Newest first. Dates are UTC.
 
 ## 2026-10-30
 
+### Reliability
+- **"Docker did not come up" now says what actually happened when Docker Desktop disconnected your Ubuntu.** Docker
+  Desktop removes an Ubuntu from its WSL integration by itself when that Ubuntu is shut down or crashes while Docker is
+  running (`wsl --shutdown`, `wsl --terminate`, out of memory). Docker keeps running, so "start Docker Desktop" was the
+  wrong advice. `bin/up.sh` and `bin/verify.sh` now detect it and give the exact setting to switch back on. Found when
+  stopping one test Ubuntu during a fresh-clone test silently disconnected it. (`bin/lib.sh`)
+
 ### Conversations
 - **Long conversations are condensed, and saved to memory first, now.** OpenClaw never asks a non-OpenAI server for
   token counts, so every reply was recorded as 0 tokens: it never knew the conversation was filling up, so it never

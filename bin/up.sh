@@ -21,11 +21,13 @@ exec 9>"$STATE_DIR/up.lock"
 flock -n 9 || die "another bin/up.sh is already running; wait for it to finish (it can take a few minutes)"
 
 log "1/6 Docker"
+if ! docker_ok && docker_disconnected; then die "$(docker_fix_hint)"; fi
 if ! docker_ok; then
   log "starting Docker Desktop"
   cmd.exe /c start "" "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe" >/dev/null 2>&1 </dev/null
   for _ in $(seq 1 60); do docker_ok && break; sleep 3; done
 fi
+docker_ok || ! docker_disconnected || die "$(docker_fix_hint)"
 docker_ok && ok "docker up" || die "Docker did not come up in 3 minutes. Start Docker Desktop, then re-run"
 
 log "2/6 cron"

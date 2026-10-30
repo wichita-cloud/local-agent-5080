@@ -115,5 +115,19 @@ vram_free_mib() {
 llama_healthy() { curl -s -m 3 "http://127.0.0.1:$LLAMA_PORT/health" 2>/dev/null | grep -q '"status" *: *"ok"'; }
 
 docker_ok() { timeout 20 docker info >/dev/null 2>&1; }
+# Docker Desktop is running on Windows, but has disconnected THIS Ubuntu. It does that by itself when a connected Ubuntu
+# is shut down or crashes while Docker runs (wsl --shutdown, wsl --terminate, out of memory): it logs "exited
+# unexpectedly" and removes the distro from Settings → Resources → WSL integration. Measured 2026-10-29. Then there is no
+# /var/run/docker.sock here, while the Windows docker.exe still answers.
+docker_disconnected() {
+  [ -S /var/run/docker.sock ] && return 1
+  local w="/mnt/c/Program Files/Docker/Docker/resources/bin/docker.exe"
+  [ -x "$w" ] && timeout 20 "$w" info >/dev/null 2>&1
+}
+docker_fix_hint() {
+  echo "Docker Desktop is running but has disconnected this Ubuntu (${WSL_DISTRO_NAME:-this distro}). It does that when the"
+  echo "        Ubuntu is shut down while Docker runs. Fix: Docker Desktop → Settings → Resources → WSL integration → switch"
+  echo "        ${WSL_DISTRO_NAME:-this distro} on → Apply & restart. Then run this again."
+}
 
 GAME_FLAG="$STATE_DIR/game-mode.flag"
