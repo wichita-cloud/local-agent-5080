@@ -24,7 +24,9 @@ Design rules (each one prevents a specific failure):
   * SEARCH FIRST. When the request offers the `web_search` tool, a one-line note after the user's message reminds the
     model to search before saying it doesn't know. The same rule in the system prompt alone was skipped about 1 turn in
     18 ("I don't have information about that game... would you like me to search?"). A note next to the question is
-    the same on every request of a turn, so it doesn't disturb the prompt cache. SEARCH_NUDGE=0 turns it off.
+    the same on every request of a turn, so it doesn't disturb the prompt cache. SEARCH_NUDGE=0 turns it off. It is not
+    added when the question matched the person's memories: that nudge made a "from memory only" question search the
+    web, sending words from it to public search engines (seen in a packet capture).
   * CONTEXT WARNING. OpenClaw condenses ("compacts") a conversation when it nears the context window minus a reserve
     (12k-20k tokens, set by gateway-up.sh from the window size). Nobody knows that is coming, so at 75% of that point
     the model is told to add one line saying so, and at 90% to save the project to projects/<name>.md with numbered
@@ -249,7 +251,9 @@ def maybe_inject(body):
         block, failed = fetch_memories(clean_query_text(qtext))
         if failed:
             block = FAIL_NOTE.format(why=failed)
-        nudge = SEARCH_NOTE if SEARCH_NUDGE and has_tool(payload, "web_search") else ""
+        # Not when the question matched the person's own memories: that is a question about their own life, and a
+        # nudge to search sent words from it to public search engines (a "from memory only" question still searched).
+        nudge = SEARCH_NOTE if SEARCH_NUDGE and not block and has_tool(payload, "web_search") else ""
         cnote = context_note(msgs, idx, qtext, len(body))
         nudge = "\n\n".join(x for x in (nudge, cnote) if x)
         if not block and not nudge:

@@ -1,7 +1,7 @@
 # Memory: how the agent remembers, how to teach it, and how to get things back
 
 ## How a memory is made
-The agent writes notes as ordinary files in its workspace (`~/.openclaw/workspace`; in Windows Explorer: `\\wsl.localhost\Ubuntu-22.04\home\<your Ubuntu user>\.openclaw\workspace`):
+The agent writes notes as ordinary files in its workspace (`~/.openclaw/workspace`; in Windows Explorer: `\\wsl.localhost\Ubuntu-22.04\home\<your Ubuntu user>\.openclaw\workspace`, or with the Windows installer `\\wsl.localhost\BoomerGT\home\agent\.openclaw\workspace`):
 `memory/` (its own notes), `projects/` (project files) and `knowledge/` (what you taught it). Every 10 minutes
 `services/memory_ingest.py` turns those files into memories:
 

@@ -28,6 +28,7 @@ Everything is bash and small Python programs. There is no build step, and every 
 | `characters/<preset>/` | Agent personality presets (`SOUL.md`, `IDENTITY.md`, `AGENTS.md`, …). `default/` is seeded into an empty workspace by `install.sh`. |
 | `bin/services-up.sh` | Start memory service, memory proxy and readiness gate (idempotent, one instance each). |
 | `bin/gateway-up.sh` | Write the OpenClaw config from the active profile, then (re)start the gateway and print the URL. |
+| `bin/privacy-check.sh`, `services/net_watch.py` | Checks that data stays on the PC: ports open to this PC only (and nothing answers through the LAN address), privacy settings, where data lives; `--live` packet-captures WSL (net_watch.py, root) and samples Windows' table for Docker's backend while the agent answers from memory. Evidence in `$STATE_DIR/privacy-check/`. Changes nothing. |
 | `bin/verify.sh` | Layered health report. Fixes nothing. Exit 0 only if every layer passes. |
 | `bin/bench.sh` | Real speed test with a large, uncacheable prompt. Compares the result to the profile's expected numbers. |
 | `bin/gpu-release.sh` / `bin/gpu-restore.sh` | Game mode: free the 5080, then bring the model back and prove it's fast. |

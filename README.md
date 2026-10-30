@@ -67,6 +67,7 @@ measured on that one.
 | Faster: MTP profile | the same 27B with its multi-token-prediction layer: **~12 ms/token (~80 tok/s) for chat, ~130 tok/s for file edits**, same answers, 32k context (`qwen3.5-27b-mtp`; [docs/MODELS.md](docs/MODELS.md)) |
 | Longer: 64k profile | the same 27B at **64k context** with 4-bit cache, same chat speed ([docs/MODELS.md](docs/MODELS.md)) |
 | Sees images | the 64k and MTP profiles read photos and screenshots you send; the image encoder runs on the CPU, so it costs no GPU memory |
+| Private by design | the model, your chats and the agent's memory stay on this PC; nothing on your network can reach them; it works with the network unplugged. Check it yourself with `bin/privacy-check.sh` ([docs/SECURITY.md](docs/SECURITY.md#what-leaves-your-pc)) |
 | Web console | `http://localhost:18800`: is it running optimally, switch or download models, edit the agent's character |
 | Switching models | one click in the console, or `bin/model.sh use <profile>`; nothing else needs editing |
 | Voice (optional add-on) | talk to the agent with the microphone (local speech-to-text) and hear it answer in a voice you choose or clone from a 10-30 s recording; all local, on spare CPU cores ([docs/VOICE.md](docs/VOICE.md)) |
@@ -169,8 +170,10 @@ knowledge base, plus exactly where your data lives and what (if anything) goes o
 | Check it isn't secretly slow | Health → Run benchmark | `bin/bench.sh` |
 | Try a different model | Models → Download, then Switch | `bin/model.sh download <name>`, then `bin/model.sh use <name>` |
 | Change its personality | Character tab | edit the files in `~/.openclaw/workspace/` |
+| Check that your memory and chats stay on this PC | | `bin/privacy-check.sh`; add `--live` to also watch the network while it answers from memory ([docs/SECURITY.md](docs/SECURITY.md#check-it-yourself)) |
+| Keep the agent offline entirely (no web search, no web pages) | | `bin/security.sh web off` (`web on` to undo) |
 | Back up / restore its notes, memories and settings | | `bin/backup.sh` (also nightly), `bin/backup.sh list`, `bin/backup.sh restore <name>` ([docs/MEMORY.md](docs/MEMORY.md)) |
-| See the notes and files your agent wrote | | In Windows Explorer's address bar: `\\wsl.localhost\Ubuntu-22.04\home\<your Ubuntu user>\.openclaw\workspace` (the live folder, not a copy) |
+| See the notes and files your agent wrote | | In Windows Explorer's address bar: `\\wsl.localhost\Ubuntu-22.04\home\<your Ubuntu user>\.openclaw\workspace` (the live folder, not a copy; with the Windows installer: `\\wsl.localhost\BoomerGT\home\agent\.openclaw\workspace`) |
 | Play a game | **Game Mode** → Win+P (graphics card's screen only) → monitor input to DisplayPort. Afterwards: Win+P (motherboard's screen only) → input to HDMI → **Restore Agent** | `bin/gpu-release.sh` … `bin/gpu-restore.sh` |
 | Free the graphics card when Game Mode didn't | Restart Windows: afterwards nothing of the agent is on the card until you send a message | |
 | Bring everything back after a reboot | Health → Bring everything up | `bin/up.sh` (starts Docker Desktop if needed, then every layer, then verifies) |

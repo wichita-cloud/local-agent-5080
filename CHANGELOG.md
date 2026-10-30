@@ -5,6 +5,24 @@ how. Newest first. Dates are UTC.
 
 ## 2026-10-30
 
+### Privacy: your data stays on this PC, and you can check it yourself
+- **New `bin/privacy-check.sh`** (and the console's Security tab: "Check now"): PASS or FAIL for every port being open to
+  this PC only, tested from Windows the way another device on your network would try; the privacy settings; and where
+  memory, chats and backups are kept. `--live` ("Watch the network") also captures every connection leaving the PC for
+  two minutes and while the agent answers a question from memory, watching both WSL and Docker Desktop (whose container
+  traffic leaves through Windows, not WSL), and saves the raw evidence next to the report. docs/SECURITY.md, "Check it
+  yourself", has the measured results and the unplug-the-cable test.
+- **A question about you no longer sends words to search engines.** In a packet capture, "answer from memory only, without
+  searching" still made the agent search the web once: the memory proxy added both your memories and a reminder to search.
+  The reminder is now left out when the question matches your memories, and the agent's rules (new "Privacy" section in
+  `characters/default/AGENTS.md`) keep private details out of searches. Re-captured: no search, no connection.
+- **`bin/security.sh web off`** (console: "Never go online"): no web search, no web pages, no scheduled-research searches.
+- **OpenClaw no longer announces itself on the local network.** The capture showed mDNS packets when the gateway started;
+  `discovery.mdns.mode` is now off. (`bin/gateway-up.sh`)
+- **The installer refuses an install folder inside OneDrive, Dropbox, Google Drive or iCloud**, which would upload the
+  agent's whole disk, memory and chats included.
+- Measured: with all outgoing traffic from WSL blocked, the services restarted and the agent answered from memory.
+
 ### Windows installer
 - **`BoomerGT-setup.exe`, a setup wizard that does the whole Quick start for you**, now in the repo (`installer/`, source
   and build script) and attached to each release with its SHA-256. It checks the PC, turns on WSL, installs Docker

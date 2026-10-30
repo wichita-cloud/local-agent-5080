@@ -99,19 +99,28 @@ Things worth knowing:
 
 ## What leaves your PC
 
-The model, your chats, your notes and your memories never leave the PC. These do, and each one tells someone your IP address:
+The model, your chats, your notes and your memories never leave the PC: they are files on the agent's own Ubuntu disk,
+and every program that holds them listens on this PC only (127.0.0.1), so nothing on your network can reach them. You
+can check all of this yourself; see [Check it yourself](#check-it-yourself) below. These things do leave, and each one
+tells someone your IP address:
 
 | What | Who receives it | When |
 |---|---|---|
 | Your web-search words | the public search engines SearXNG asks (it sends no cookies and no account) | each web search |
+| What the agent types into a search | the same search engines. The agent writes the search itself, so it can echo words from your conversation. Its rules tell it to keep private details (names, health, money, addresses, anything from your memory) out of searches and to answer questions about your own life from memory, and it is no longer prompted to search when your question matched your memories | each web search; none with `bin/security.sh web off` |
 | The address of each page the agent reads | that website | each `web_fetch` |
 | The address of a page that refused the agent | **Jina AI** (owned by Elastic since October 2025), and your Jina account if you set a key | only with the Jina option on (`JINA_FALLBACK=on`, off by default) |
 | Scheduled-research search words | Tavily or Brave, tied to your API key | only if you set one up (docs/OVERNIGHT.md) |
 | Downloads: models, programs, Docker images | Hugging Face, GitHub, npm, PyPI, Docker registries, Ubuntu | install, updates, a model download |
+| Docker Desktop's own update and usage-statistics checks | Docker, Inc. (not your data: Docker Desktop reports on itself) | now and then; switch the statistics off in Docker Desktop → Settings → General → "Send usage statistics" |
 
 Nothing else reports home: usage statistics are switched off for every component that has them (`bin/lib.sh` sets
-`DO_NOT_TRACK`, `HF_HUB_DISABLE_TELEMETRY`, ChromaDB's `anonymized_telemetry=False`), and the memory models stay offline
-after their first download.
+`DO_NOT_TRACK`, `HF_HUB_DISABLE_TELEMETRY`, ChromaDB's `anonymized_telemetry=False`), the memory models stay offline
+after their first download, OpenClaw's update check and diagnostics export are off, and it doesn't announce itself on
+your local network (its mDNS advertisement is switched off).
+
+**Want the agent never to go online?** `bin/security.sh web off` turns off web search, reading web pages and
+scheduled research's searches (`web on` brings them back). Everything else works as before: chat, memory, files, voice.
 
 **About the Jina option.** Jina's Reader turns a page that blocks automated visits into readable text. But Jina then knows which pages your agent wanted and from which IP address, and Jina's own
 policy pages do not say how long Reader requests are kept (they now defer to Elastic's privacy statement). Leave it off
@@ -120,6 +129,36 @@ Measured 2026-10-26: of 8 home pages that refused a direct fetch (401/403), Jina
 Home Depot, Best Buy, the New York Times) and a CAPTCHA for the other 4. Without a key it is also less dependable for
 popular sites: Jina blocked anonymous requests for nytimes.com for a few hours because of other people's traffic, minutes
 after the same page had worked.
+
+### Check it yourself
+You don't have to take this page's word for it. Three ways, from simplest to most thorough:
+
+1. **Unplug the network cable** (or switch Wi-Fi off), then chat and ask the agent about something it remembers. It
+   answers: the model, the memory and everything that serves them run on this PC. Only web search and page reading stop.
+2. **Run the privacy check** in the agent's Ubuntu: `bin/privacy-check.sh`. It changes nothing and reports PASS or FAIL
+   for: every port listening on this PC only (and, from Windows, whether anything answers through your PC's network
+   address the way another device on your Wi-Fi would reach it); the agent's settings (no network announcements, no
+   telemetry, no online voice, web on or off, the sandbox without internet); and where your memory, chats and backups
+   are kept (inside the agent's own Ubuntu, whose disk must not sit in OneDrive, Dropbox or a similar synced folder).
+3. **Watch the network:** `bin/privacy-check.sh --live` (asks for your password once, for the packet capture) watches
+   for two minutes of idle time, then asks the agent a question about you that must be answered from memory, and lists
+   every connection that left the PC meanwhile, with the names looked up and the time. It watches from two places,
+   because Docker Desktop sends container traffic out through its own Windows program: inside WSL (the agent, memory
+   service, proxies, console) with `services/net_watch.py`, and on Windows (the model server, search container and
+   sandbox) from Windows' own connection table. The raw data is saved next to the report, in
+   `~/.local/state/local-agent/privacy-check/<date-time>/`, so you can read it, or compare it with Windows Resource
+   Monitor (Network tab) or your router's logs.
+
+Measured 2026-10-30 on the machine this was built on, with these results:
+
+| Check | Result |
+|---|---|
+| Two minutes idle, then a memory question, watched from WSL and from Windows | no connection left the PC, no name was looked up, no web search was made |
+| The same question before the fix to the search reminder (it said "answer from memory only") | the agent still searched the web once, so words from it reached public search engines. Fixed: no search reminder when your question matches your memories, plus the privacy rules above |
+| Restarting the memory service, the proxies and the agent, watched from WSL | no connection left the PC (the memory models did not contact Hugging Face) |
+| All outgoing traffic from WSL blocked, the services restarted, then a memory question | answered correctly from memory; 0 failed memory lookups |
+| Every port of the stack, contacted through the PC's network address | nothing answered (a test server listening on all addresses was found, so the test does catch an exposure) |
+| Before switching off OpenClaw's mDNS | it announced the gateway by multicast DNS when it started (inside WSL's virtual network). Now off |
 
 ### Being more anonymous: what works now, and options for later
 - **Now, simplest: a VPN on Windows.** WSL's traffic leaves through Windows, so a VPN app hides your home IP address from

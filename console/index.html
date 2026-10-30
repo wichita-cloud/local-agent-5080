@@ -391,6 +391,19 @@ details.adv{margin-top:8px}details.adv summary{font-size:13px;color:var(--mut)}
 
 <section id="tab-security" hidden>
   <div class="card">
+    <h2 style="margin-top:0">Does my data stay on this PC?</h2>
+    <p class="small mut" style="margin-top:-4px">The model, your chats and the agent's memory are kept on this PC, and nothing on your network can reach them.
+      Check it yourself: the first button checks every port and setting in a few seconds; the second also watches the network for
+      two minutes and while the agent answers a question from memory, then lists anything that left the PC. The simplest test of
+      all: unplug the network cable, then chat. Details and the evidence files: docs/SECURITY.md, "Check it yourself".</p>
+    <div class="btns"><button class="b pri" data-job="privacy-check">Check now</button>
+      <button class="b" data-job="privacy-check" data-live="1" title="bin/privacy-check.sh --live 120">Watch the network (~3 min)</button></div>
+    <p class="small mut" style="margin-top:10px">Web search and reading web pages are the only things the agent itself sends out (the search words it writes and
+      the addresses it opens). To keep it offline entirely:</p>
+    <div class="btns"><button class="b" data-job="security-web" data-value="off" title="bin/security.sh web off">Never go online</button>
+      <button class="b" data-job="security-web" data-value="on" title="bin/security.sh web on">Allow web search and pages</button></div>
+  </div>
+  <div class="card">
     <h2 style="margin-top:0">How much of your PC can the agent touch?</h2>
     <p class="small mut" style="margin-top:-4px">The agent can run commands and change files. If it reads something malicious (a web page, a document) or just makes
       a mistake, the damage is limited to what it can reach. Web research works in both modes.</p>
@@ -633,7 +646,7 @@ async function startJob(kind, extra = {}) {
   try { await api("/api/job", {kind, ...extra}); } catch (e) { toast(e.message); return; }
   jobOffset = 0; $("#actLog").textContent = ""; $("#activity").hidden = false; $("#activity").classList.remove("min");
   $("#actTitle").textContent = {bench: "Benchmark", verify: "Full verify", switch: "Switching model", download: "Downloading model",
-    up: "Bringing everything up", gateway: "Restarting the agent", ingest: "Re-indexing notes", tune: "Applying model settings", "voice-install": "Installing voice", "voice-use": "Changing the agent's voice", "overnight-test": "Testing the overnight job", "searxng-up": "Setting up SearXNG", "searxng-down": "Stopping SearXNG", "overnight-run": "Running the overnight job", "security-profile": "Changing the security profile", "security-network": "Changing sandbox internet access", "security-jina": "Changing the Jina reader setting", "security-share-add": "Sharing a folder", "security-share-remove": "Removing a shared folder"}[kind] || kind;
+    up: "Bringing everything up", gateway: "Restarting the agent", ingest: "Re-indexing notes", tune: "Applying model settings", "voice-install": "Installing voice", "voice-use": "Changing the agent's voice", "overnight-test": "Testing scheduled research", "privacy-check": "Checking that your data stays on this PC", "security-web": "Changing web access", "searxng-up": "Setting up SearXNG", "searxng-down": "Stopping SearXNG", "overnight-run": "Running scheduled research", "security-profile": "Changing the security profile", "security-network": "Changing sandbox internet access", "security-jina": "Changing the Jina reader setting", "security-share-add": "Sharing a folder", "security-share-remove": "Removing a shared folder"}[kind] || kind;
   setJobButtons(true); pollJob();
 }
 async function pollJob() {
@@ -651,7 +664,7 @@ async function pollJob() {
 function setJobButtons(busy) { $$("[data-job]").forEach(b => b.disabled = busy); $$(".needsidle").forEach(b => b.disabled = busy); }
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-job]"); if (!b) return;
-  startJob(b.dataset.job, {quick: !!b.dataset.quick, profile: b.dataset.profile, voice: b.dataset.voice});
+  startJob(b.dataset.job, {quick: !!b.dataset.quick, live: !!b.dataset.live, value: b.dataset.value, profile: b.dataset.profile, voice: b.dataset.voice});
 });
 $("#actMin").onclick = () => { const a = $("#activity"); a.classList.toggle("min"); $("#actMin").textContent = a.classList.contains("min") ? "Show output" : "Hide output"; };
 $("#actClose").onclick = () => $("#activity").hidden = true;

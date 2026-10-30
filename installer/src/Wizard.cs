@@ -245,8 +245,28 @@ namespace BoomerGT
                 ? "Bolt is as fast as the 27B, but only while nothing else uses much memory: close other Linux (WSL) systems and big programs, and keep the monitor on the motherboard."
                 : "Setup suggests a model that fits your graphics card. You can change it later.";
         }
+        // A folder that syncs to the cloud (OneDrive, Dropbox, Google Drive, iCloud) would upload the agent's whole Ubuntu
+        // disk, memory and chats included. Everything is meant to stay on this PC, so such a folder is refused.
+        static string CloudFolder(string path)
+        {
+            string full; try { full = Path.GetFullPath(path).TrimEnd('\\') + "\\"; } catch { return null; }
+            foreach (string v in new[] { "OneDrive", "OneDriveConsumer", "OneDriveCommercial" })
+            {
+                string od = Environment.GetEnvironmentVariable(v);
+                if (!string.IsNullOrEmpty(od) && full.StartsWith(od.TrimEnd('\\') + "\\",StringComparison.OrdinalIgnoreCase)) return "OneDrive";
+            }
+            foreach (string n in new[] { "OneDrive", "Dropbox", "Google Drive", "My Drive", "iCloudDrive", "iCloud Drive" })
+                if (full.IndexOf("\\" + n, StringComparison.OrdinalIgnoreCase) >= 0) return n;
+            return null;
+        }
         void UpdateSpace()
         {
+            string cloud = CloudFolder(dir.Text);
+            if (cloud != null)
+            {
+                space.Text = "That folder syncs to " + cloud + ", which would upload the agent's memory and chats. Choose a folder on this PC only.";
+                space.ForeColor = R.Maroon; return;
+            }
             try
             {
                 string root = Path.GetPathRoot(Path.GetFullPath(dir.Text));
@@ -271,7 +291,7 @@ namespace BoomerGT
             int i = ids.IndexOf(W.RecommendedModel); if (i >= 0) model.SelectedIndex = i;
             UpdateNote(); UpdateSpace();
         }
-        public override bool Ready() { try { Path.GetFullPath(dir.Text); return dir.Text.Trim().Length > 3; } catch { return false; } }
+        public override bool Ready() { try { Path.GetFullPath(dir.Text); return dir.Text.Trim().Length > 3 && CloudFolder(dir.Text) == null; } catch { return false; } }
         public override void Leave()
         {
             // A folder that already holds other files (say Documents, typed by hand) gets a BoomerGT subfolder, so the

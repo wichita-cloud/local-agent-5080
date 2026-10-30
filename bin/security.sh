@@ -5,6 +5,8 @@
 #   bin/security.sh choose [--no-apply]        asks the install question (what bin/install.sh runs)
 #   bin/security.sh set protected|standard     switch profile (builds the sandbox image the first time, restarts the agent)
 #   bin/security.sh network on|off             may commands inside the sandbox use the internet? (default off)
+#   bin/security.sh web on|off                 off = the agent never goes online (no web search, no page reading, no
+#                                              scheduled-research searches); docs/SECURITY.md
 #   bin/security.sh jina on|off                retry pages that refuse the agent through Jina AI's reader (default off;
 #                                              privacy: Jina then sees those page addresses and your IP; docs/SECURITY.md)
 #   bin/security.sh share list
@@ -18,7 +20,7 @@
 #       from inside, and cannot run commands on your PC ("elevated" is off). Web pages are still fetched by the agent
 #       itself, so research works. Your Windows drives, SSH keys and the rest of your home folder are out of its reach.
 #   standard: the agent runs commands directly on your PC as your WSL user, which can read and write your Windows
-#       drives (the original behaviour). Fine if you trust everything it will read; see docs/SECURITY.md.
+#       drives (how OpenClaw works by default). Fine if you trust everything it will read; see docs/SECURITY.md.
 # Every change is applied by bin/gateway-up.sh, so a reset OpenClaw config heals itself on the next start.
 set -u
 . "$(dirname "$0")/lib.sh"
@@ -78,6 +80,7 @@ case "$cmd" in
     p="${SECURITY_PROFILE:-standard}"
     echo "profile:  $p $( [ "$p" = protected ] && echo '(the agent runs inside a sandbox)' || echo '(the agent runs commands directly on your PC)')"
     echo "network:  sandbox commands $( [ "${SANDBOX_NETWORK:-off}" = on ] && echo 'CAN' || echo 'cannot') use the internet"
+    echo "web:      the agent $( [ "${WEB_ACCESS:-on}" = off ] && echo 'never goes online (no search, no web pages)' || echo 'can search the web and read pages')"
     echo "shared folders:"; if [ -n "$(shares)" ]; then shares | awk -F'|' '{printf "  %s  (%s)\n", $1, ($2=="rw"?"read and write":"read-only")}'; else echo "  none (the agent only has its own workspace)"; fi
     if [ "$p" = protected ]; then docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1 && echo "sandbox image: ready" || echo "sandbox image: NOT built (bin/security.sh set protected builds it)"; fi
     command -v openclaw >/dev/null 2>&1 && { echo "--- OpenClaw's own audit"; openclaw security audit 2>&1 | sed -n '2,4p;/^WARN/,$p' | head -20; } ;;
@@ -126,6 +129,11 @@ TXT
   network)
     v="${1:-}"; case "$v" in on|off) ;; *) die "usage: bin/security.sh network on|off";; esac
     setkey SANDBOX_NETWORK "$v"; ok "sandbox internet: $v"; apply ;;
+  web)
+    v="${1:-}"; case "$v" in on|off) ;; *) die "usage: bin/security.sh web on|off";; esac
+    setkey WEB_ACCESS "$v"
+    [ "$v" = off ] && ok "web access: off. The agent no longer searches or reads web pages; scheduled research uses your notes only"                    || ok "web access: on"
+    "$REPO/bin/gateway-up.sh" >/dev/null 2>&1 && ok "agent restarted with the new setting" || warn "restart the agent: bin/gateway-up.sh" ;;
   jina)
     v="${1:-}"; case "$v" in on|off) ;; *) die "usage: bin/security.sh jina on|off";; esac
     setkey JINA_FALLBACK "$v"

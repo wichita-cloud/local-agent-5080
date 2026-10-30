@@ -8,6 +8,7 @@
 #   * provider "ollama" with api=openai-completions pointed at the readiness gate: this is the path the
 #     tool-call patches hook into, and it streams properly (the Ollama-native API path returned empty replies).
 #   * compaction reserve: OpenClaw's flat 20000 condensed a 32k conversation at 12.7k, nearly every turn.
+#   * discovery.mdns.mode off: OpenClaw otherwise announces the gateway on the local network.
 #   * bootstrapMaxChars: the default 20000 silently truncates long instruction files (AGENTS.md etc.) each turn.
 #   * userTimezone: without it, timestamps are UTC and the agent says "good morning" at 9 pm.
 #   * a pinned auth token: a regenerated token makes the browser lose its pairing ("token mismatch").
@@ -61,10 +62,14 @@ oc agents.defaults.compaction.reserveTokens "$COMPACTION_RESERVE_TOKENS"
 oc agents.defaults.compaction.reserveTokensFloor "$COMPACTION_RESERVE_TOKENS"
 oc agents.defaults.compaction.keepRecentTokens "$COMPACTION_KEEP_TOKENS"
 [ -n "${USER_TIMEZONE:-}" ] && oc agents.defaults.userTimezone "$USER_TIMEZONE"
-oc tools.web.fetch.enabled true
+# No announcing this PC on the network: OpenClaw advertises its gateway by mDNS by default (seen in a packet capture).
+oc discovery.mdns.mode off
+oc discovery.wideArea.enabled false
+# WEB_ACCESS=off (bin/security.sh web off): the agent never goes online. Both web tools off; the search case below is skipped.
+if [ "$WEB_ACCESS" = off ]; then oc tools.web.fetch.enabled false; else oc tools.web.fetch.enabled true; fi
 # The agent's web_search: Brave if you gave a key; otherwise the local SearXNG container (no account, no card) through
 # services/search_shim.py, using OpenClaw's Perplexity mode with our own address; otherwise off (it can still read links).
-case "$(search_wanted)" in
+case "$([ "$WEB_ACCESS" = off ] && echo off || search_wanted)" in
   brave) oc tools.web.search.enabled true; oc tools.web.search.provider brave ;;
   searxng)
     oc tools.web.search.enabled true; oc tools.web.search.provider perplexity

@@ -832,6 +832,8 @@ JOBS = {
     "overnight-run": lambda d: [os.path.join(BIN, "overnight.sh"), "run"],
     "security-profile": lambda d: [os.path.join(BIN, "security.sh"), "set", d.get("profile") if d.get("profile") in ("protected", "standard") else _bad("profile")],
     "security-network": lambda d: [os.path.join(BIN, "security.sh"), "network", "on" if d.get("value") == "on" else "off"],
+    "security-web": lambda d: [os.path.join(BIN, "security.sh"), "web", "on" if d.get("value") == "on" else "off"],
+    "privacy-check": lambda d: [os.path.join(BIN, "privacy-check.sh")] + (["--live", "120"] if d.get("live") else []),
     "security-jina": lambda d: [os.path.join(BIN, "security.sh"), "jina", "on" if d.get("value") == "on" else "off"],
     "security-share-add": lambda d: [os.path.join(BIN, "security.sh"), "share", "add", _safe_arg(d.get("path"), "folder"), "rw" if d.get("mode") == "rw" else "ro"],
     "security-share-remove": lambda d: [os.path.join(BIN, "security.sh"), "share", "remove", _safe_arg(d.get("path"), "folder")],

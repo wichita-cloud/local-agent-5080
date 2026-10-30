@@ -339,6 +339,8 @@ def providers():
 
 def provider_choice(avail=None):
     """The provider to use tonight: OVERNIGHT_SEARCH if set and usable, else the first one set up (tavily, brave, searxng), else ''."""
+    if E("WEB_ACCESS", "on") == "off":   # bin/security.sh web off: never online, ideas come from the notes alone
+        return ""
     avail = avail or providers()
     pref = E("OVERNIGHT_SEARCH", "auto")
     if pref in avail:
