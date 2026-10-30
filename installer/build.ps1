@@ -16,7 +16,7 @@ if ($LASTEXITCODE -ne 0) { throw 'make_assets.py failed (needs Python with Pillo
 git -C $Repo show "${Rev}:windows/Autostart.ps1" | Set-Content -Path payload\Autostart.ps1 -Encoding UTF8
 git -C $Repo archive --format=tar.gz -o "$here\payload\agent.tar.gz" $Rev -- . ':(exclude)installer'
 if ($LASTEXITCODE -ne 0) { throw "git archive failed for $Rev" }
-$sha = (git -C $Repo rev-parse --short $Rev)
+$sha = (git -C $Repo rev-parse --short "${Rev}^{}")   # ^{}: a tag names its commit, not the tag object
 Set-Content -Path payload\VERSION.txt -Value $sha -Encoding ASCII
 
 New-Item -ItemType Directory -Force -Path dist | Out-Null
