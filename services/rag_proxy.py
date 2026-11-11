@@ -37,6 +37,12 @@ Design rules (each one prevents a specific failure):
   * TOKEN COUNTS. Streaming requests get stream_options.include_usage (OpenClaw doesn't ask a non-OpenAI server for it),
     so OpenClaw knows how full the conversation is and condenses it, and saves memory first, before the window fills.
   * The injection is ephemeral: it is added in flight and never saved into the agent's history.
+  * TRACES. One JSON line per chat request in $STATE_DIR/traces/<date>.ndjson (14 days kept): request size, message
+    count, what ended the request (a user message or a tool result), tools offered, the memory outcome, the NAMES of the
+    tools the model called, and llama's own timings from the reply (tokens read, tokens reused from the prompt cache,
+    reading and writing speed). Never message text or tool arguments. It answers "why was that turn slow?" and lets
+    verify.sh check that the prompt cache is being reused. Read from the relayed bytes without changing them; fails open.
+    TRACE=0 turns it off.
 
 Kill switch: create $STATE_DIR/rag-proxy.disable for a pure passthrough.
 """
@@ -83,6 +89,9 @@ CTX_NOTE_NOW = ("(Automatic note: this conversation is about to be condensed ({p
                 "warning that the conversation is about to be condensed, name the file the progress is saved in, and "
                 "list the resume options numbered, so the user can reply with a number now or say "
                 "'continue <project>' in a new chat.)")
+TRACE      = os.environ.get("TRACE", "1") != "0"
+TRACE_DIR  = os.path.join(STATE_DIR, "traces")
+TRACE_DAYS = 14
 _ctx_notes = collections.OrderedDict()   # hash of the user message -> the note chosen for its turn
 HOP_BY_HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
               "te", "trailers", "transfer-encoding", "upgrade", "content-length"}
@@ -291,6 +300,81 @@ def ask_for_usage(body):
         return body
 
 
+def request_shape(body):
+    """What the trace records about a request: never its text."""
+    try:
+        p = json.loads(body)
+        msgs = p.get("messages") or []
+        return {"msgs": len(msgs), "last": (msgs[-1].get("role") if msgs else ""), "tools_offered": len(p.get("tools") or []),
+                "stream": bool(p.get("stream"))}
+    except Exception:
+        return {"msgs": 0, "last": "", "tools_offered": 0, "stream": False}
+
+
+class ReplySniffer:
+    """Picks the tool-call names, finish reason and llama's timings out of a reply while it is relayed. Never raises."""
+    MAX = 4 << 20
+
+    def __init__(self, stream):
+        self.stream, self.buf, self.raw = stream, b"", bytearray()
+        self.tools, self.timings, self.finish = [], {}, ""
+
+    def feed(self, chunk):
+        try:
+            if not self.stream:
+                if len(self.raw) < self.MAX:
+                    self.raw += chunk
+                return
+            self.buf += chunk
+            *lines, self.buf = self.buf.split(b"\n")
+            for ln in lines:
+                ln = ln.strip()
+                if ln.startswith(b"data: {"):
+                    self._take(json.loads(ln[6:]))
+            if len(self.buf) > self.MAX:
+                self.buf = b""
+        except Exception:
+            pass
+
+    def done(self):
+        if not self.stream and self.raw:
+            try:
+                self._take(json.loads(bytes(self.raw)))
+            except Exception:
+                pass
+
+    def _take(self, o):
+        if o.get("timings"):
+            self.timings = o["timings"]
+        for c in o.get("choices") or []:
+            d = c.get("delta") or c.get("message") or {}
+            for tc in d.get("tool_calls") or []:
+                name = (tc.get("function") or {}).get("name")   # a streamed call names itself in its first piece only
+                if name:
+                    self.tools.append(name)
+            if c.get("finish_reason"):
+                self.finish = c["finish_reason"]
+
+
+def write_trace(rec):
+    if not TRACE:
+        return
+    try:
+        os.makedirs(TRACE_DIR, exist_ok=True)
+        path = os.path.join(TRACE_DIR, time.strftime("%F") + ".ndjson")
+        first_today = not os.path.exists(path)
+        with open(path, "a") as f:
+            f.write(json.dumps(rec, separators=(",", ":")) + "\n")
+        if first_today:
+            cutoff = time.time() - TRACE_DAYS * 86400
+            for name in os.listdir(TRACE_DIR):
+                p = os.path.join(TRACE_DIR, name)
+                if name.endswith(".ndjson") and os.path.getmtime(p) < cutoff:
+                    os.remove(p)
+    except Exception:
+        pass
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -300,12 +384,17 @@ class Handler(BaseHTTPRequestHandler):
     def _proxy(self, method):
         n = int(self.headers.get("Content-Length", 0) or 0)
         body = self.rfile.read(n) if n else b""
+        trace = sniff = None
         if method == "POST" and self.path.endswith("/v1/chat/completions"):
+            t0 = time.time()
             body = ask_for_usage(body)
+            note = "off"
             if not os.path.exists(DISABLE_FLAG):
                 body, note = maybe_inject(body)
                 if note.startswith("injected"):
                     log(note)
+            if TRACE:
+                trace = dict(ts=time.strftime("%FT%T%z"), t0=t0, req_bytes=len(body), memory=note, **request_shape(body))
         hdrs = {k: v for k, v in self.headers.items() if k.lower() not in HOP_BY_HOP and k.lower() != "host"}
         hdrs["Content-Length"] = str(len(body))
         try:
@@ -314,7 +403,12 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             log("upstream error: %s" % e)
             self.send_error(502, "upstream unavailable")
+            if trace:
+                trace.update(status=502, ms=int(1000 * (time.time() - trace.pop("t0"))))
+                write_trace(trace)
             return
+        if trace:
+            sniff = ReplySniffer(trace["stream"])
         self.send_response(up.status_code)
         for k, v in up.headers.items():
             if k.lower() not in HOP_BY_HOP:
@@ -327,8 +421,17 @@ class Handler(BaseHTTPRequestHandler):
                 if chunk:
                     self.wfile.write(chunk)
                     self.wfile.flush()
+                    if sniff:
+                        sniff.feed(chunk)
         except Exception as e:
             log("stream relay ended: %s" % e)
+        if trace:
+            sniff.done()
+            t = sniff.timings
+            trace.update(status=up.status_code, ms=int(1000 * (time.time() - trace.pop("t0"))), tool_calls=sniff.tools,
+                         finish=sniff.finish, prompt_n=t.get("prompt_n"), cache_n=t.get("cache_n"),
+                         prompt_ms=t.get("prompt_ms"), predicted_n=t.get("predicted_n"), predicted_ms=t.get("predicted_ms"))
+            write_trace(trace)
 
     def do_POST(self):
         self._proxy("POST")
