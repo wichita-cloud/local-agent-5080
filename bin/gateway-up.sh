@@ -15,6 +15,8 @@
 #   * tools.codeMode and tools.toolSearch off: by default OpenClaw may show the model only `exec` (Code Mode) or a search
 #     over its tools (Tool Search) instead of the tools themselves. A local model then loops: one question ran 3.5 minutes
 #     of exec / tool_search / tool_call calls without answering. With both off it calls web_search, read, write directly.
+#   * tools.loopDetection on: off by default. OpenClaw's own guidance is to switch it on for smaller models; it stops a
+#     turn that repeats the same tool calls without progress instead of letting it run until the context fills.
 #   * models.catalogRefresh off: otherwise the gateway downloads a model and price list from catalog.openclaw.ai at start
 #     and every six hours. (Its plugin catalog download from clawhub.ai has no setting; patches/ keep that one offline.)
 #   * bootstrapMaxChars: the default 20000 silently truncates long instruction files (AGENTS.md etc.) each turn.
@@ -63,6 +65,7 @@ oc models.catalogRefresh.enabled false
 oc telemetry.enabled false       # off by default; set explicitly so nothing can turn it on unasked
 oc tools.codeMode '{"enabled":false}'
 oc tools.toolSearch false
+oc tools.loopDetection '{"enabled":true}'
 # OpenClaw's "dreaming" (on by default) runs a daily 3 am model job that rewrites MEMORY.md and keeps a DREAMS.md diary.
 # This stack has its own memory (services/memory_service.py, docs/MEMORY.md) and scheduled research; a second system
 # quietly editing the agent's notes overnight would be a surprise. Off, so the agent's files change only when it works.
