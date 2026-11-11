@@ -105,6 +105,28 @@ elif curl -s -m 90 "http://127.0.0.1:$SHIM_PORT/v1/chat/completions" -H 'Content
      -d "{\"model\":\"$MODEL_ALIAS\",\"messages\":[{\"role\":\"user\",\"content\":\"ok\"}],\"max_tokens\":1}" 2>/dev/null | grep -q '"choices"'; then
   pass "chat path answers (gate → memory proxy → model)"
 else fail "chat path did not answer through :$SHIM_PORT"; fi
+# Prompt-cache reuse, from the memory proxy's traces of real agent requests (3+ messages: a tool step or a follow-up
+# turn). Everything before the newest message should come from llama's cache; if a setting or a patch puts something that
+# changes every turn near the start of the prompt, every turn re-reads the whole conversation and nothing else says so.
+cache=$(python3 - "$STATE_DIR/traces" <<'PY' 2>/dev/null
+import glob, json, os, statistics, sys
+rows = []
+for p in sorted(glob.glob(os.path.join(sys.argv[1], "*.ndjson")))[-2:]:
+    for line in open(p):
+        try: r = json.loads(line)
+        except ValueError: continue
+        if r.get("status") == 200 and r.get("msgs", 0) >= 3 and r.get("prompt_n") is not None and r.get("cache_n") is not None:
+            rows.append(r["cache_n"] / max(1, r["cache_n"] + r["prompt_n"]))
+rows = rows[-30:]
+print(len(rows), int(100 * statistics.median(rows)) if rows else 0)
+PY
+)
+read -r cn cpct <<<"${cache:-0 0}"
+if [ "${cn:-0}" -lt 5 ]; then warn "prompt-cache reuse not measured yet: fewer than 5 agent requests traced in the last 2 days. Not counted"
+elif [ "$cpct" -ge 60 ]; then pass "prompt cache reused: median ${cpct}% of each prompt over the last $cn agent requests"
+else caution "prompt cache mostly not reused: median ${cpct}% over the last $cn agent requests (expect 80%+)" \
+       "every turn re-reads the whole conversation, so replies start seconds later than they should"
+     hint "something near the start of the prompt changes each turn, or another program shares the model; see $STATE_DIR/traces"; fi
 
 layer "5 Agent (OpenClaw)"
 code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 "http://127.0.0.1:$GATEWAY_PORT/" 2>/dev/null)
