@@ -25,7 +25,13 @@ set -a; . "$_cfg"; set +a
 [ -f "$REPO/config/secrets.env" ] && { set -a; . "$REPO/config/secrets.env"; set +a; }
 # Defaults for settings added after the first release, so an older config/stack.env keeps working under `set -u`.
 export CONSOLE_PORT="${CONSOLE_PORT:-18800}" OPENCLAW_WORKSPACE="${OPENCLAW_WORKSPACE:-$HOME/.openclaw/workspace}"
-export VOICE_PORT="${VOICE_PORT:-8880}" VOICE_ENGINE="${VOICE_ENGINE:-nano}" VOICE_CPUSET="${VOICE_CPUSET:-8-15}"   SEARXNG_PORT="${SEARXNG_PORT:-18888}" SEARCH_SHIM_PORT="${SEARCH_SHIM_PORT:-18890}" SECURITY_PROFILE="${SECURITY_PROFILE:-standard}" WEB_ACCESS="${WEB_ACCESS:-on}" SANDBOX_NETWORK="${SANDBOX_NETWORK:-off}" SHARED_FOLDERS="${SHARED_FOLDERS:-}" SANDBOX_IMAGE="${SANDBOX_IMAGE:-local-agent-sandbox:1}"   STT_PORT="${STT_PORT:-8890}" STT_MODEL="${STT_MODEL:-small.en}" VOICE_NAME="${VOICE_NAME:-default}" VOICE_REPLIES="${VOICE_REPLIES:-inbound}"   VOICE_VENV="${VOICE_VENV:-$HOME/.local/share/local-agent/voice-venv}" VOICE_DIR="${VOICE_DIR:-$HOME/.local/share/local-agent/voices}"
+export VOICE_PORT="${VOICE_PORT:-8880}" VOICE_ENGINE="${VOICE_ENGINE:-nano}" VOICE_CPUSET="${VOICE_CPUSET:-8-15}"   SEARXNG_PORT="${SEARXNG_PORT:-18888}" SEARCH_SHIM_PORT="${SEARCH_SHIM_PORT:-18890}" OUTBOUND_GUARD_PORT="${OUTBOUND_GUARD_PORT:-18892}" SECURITY_PROFILE="${SECURITY_PROFILE:-standard}" WEB_ACCESS="${WEB_ACCESS:-on}" SANDBOX_NETWORK="${SANDBOX_NETWORK:-off}" SHARED_FOLDERS="${SHARED_FOLDERS:-}" SANDBOX_IMAGE="${SANDBOX_IMAGE:-local-agent-sandbox:1}"   STT_PORT="${STT_PORT:-8890}" STT_MODEL="${STT_MODEL:-small.en}" VOICE_NAME="${VOICE_NAME:-default}" VOICE_REPLIES="${VOICE_REPLIES:-inbound}"   VOICE_VENV="${VOICE_VENV:-$HOME/.local/share/local-agent/voice-venv}" VOICE_DIR="${VOICE_DIR:-$HOME/.local/share/local-agent/voices}"
+
+# The OpenClaw release this code is written and tested against (patches/openclaw-<release>/ match it exactly). Set here,
+# not in config/stack.env, so an older settings file can't pin an older OpenClaw. OPENCLAW_VERSION is cleared because
+# OpenClaw reads that name as its OWN version: an old stack.env setting it made plugins refuse to load ("this host is 2026.3.11").
+OPENCLAW_RELEASE=2026.10.9 NODE_MAJOR=24
+export OPENCLAW_RELEASE NODE_MAJOR; unset OPENCLAW_VERSION
 
 # No usage statistics from any component: ChromaDB (memory), Hugging Face libraries, Gradio (pulled in by the voice
 # add-on), and anything honouring the DO_NOT_TRACK convention. This stack only goes online for what you ask it to do.
@@ -59,14 +65,12 @@ load_profile() {   # load_profile [name]: exports the profile's variables
   set +a
   LLAMA_IMAGE="${LLAMA_IMAGE_PROFILE:-$STACK_LLAMA_IMAGE}"
   PROFILE="$name"; export PROFILE LLAMA_IMAGE
-  # OpenClaw condenses a conversation once it passes contextWindow minus a reserve, and its reserve is a flat 20000.
-  # On a 32k window that left 12.7k: barely more than the agent's own ~11k prompt, so it condensed nearly every turn.
-  # Scale the reserve with the window instead (3/8 of it, 12000-20000). Recent messages kept when condensing: a quarter
-  # of the window from 64k, an eighth below (on 32k, 8k kept + the ~11k prompt + a summary was already past the next
-  # condense point, so it condensed 10 times in 8 turns). rag_proxy.py repeats the reserve formula; change both together.
-  local r=$((CTX * 3 / 8)); [ "$r" -lt 12000 ] && r=12000; [ "$r" -gt 20000 ] && r=20000
+  # OpenClaw condenses a conversation once it passes contextWindow minus a reserve (20000, at most a quarter of the
+  # window; rag_proxy.py mirrors that rule). Recent messages kept word for word when condensing: a quarter of the window
+  # from 64k, an eighth below (on 32k, 8k kept + the ~11k prompt + a summary was already past the next condense point,
+  # so it condensed 10 times in 8 turns).
   local k=$((CTX / 4)); [ "$CTX" -lt 65536 ] && k=$((CTX / 8)); [ "$k" -gt 20000 ] && k=20000
-  export COMPACTION_RESERVE_TOKENS="$r" COMPACTION_KEEP_TOKENS="$k"
+  export COMPACTION_KEEP_TOKENS="$k"
 }
 
 # Image understanding: the profile names a vision projector (MMPROJ_FILE) and the file is fully downloaded.
@@ -93,7 +97,7 @@ search_wanted() {
 }
 search_have() {
   [ "$(openclaw config get tools.web.search.enabled 2>/dev/null | tr -d '"[:space:]')" = true ] || { echo none; return; }
-  case "$(openclaw config get tools.web.search.provider 2>/dev/null | tr -d '"[:space:]')" in brave) echo brave;; perplexity) echo searxng;; *) echo other;; esac
+  case "$(openclaw config get tools.web.search.provider 2>/dev/null | tr -d '"[:space:]')" in brave) echo brave;; searxng) echo searxng;; *) echo other;; esac
 }
 # can_ask: is a person there to answer questions? LOCAL_AGENT_UNATTENDED=1 means never ask (the Windows installer sets it).
 can_ask() { [ -z "${LOCAL_AGENT_UNATTENDED:-}" ] && { [ -t 0 ] || { : </dev/tty; } 2>/dev/null; }; }

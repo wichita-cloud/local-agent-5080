@@ -1,0 +1,10 @@
+{
+  "name": "local-agent-outbound-guard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Checks what the agent is about to send to the internet (services/outbound_guard.py)",
+  "type": "module",
+  "openclaw": {
+    "extensions": ["./index.ts"]
+  }
+}

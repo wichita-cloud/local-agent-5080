@@ -7,8 +7,16 @@
 #     compaction and sends prompts the server refuses. If smaller, it wastes context.
 #   * provider "ollama" with api=openai-completions pointed at the readiness gate: this is the path the
 #     tool-call patches hook into, and it streams properly (the Ollama-native API path returned empty replies).
-#   * compaction reserve: OpenClaw's flat 20000 condensed a 32k conversation at 12.7k, nearly every turn.
+#   * compaction keepRecentTokens: how much of the latest conversation survives condensing word for word. (OpenClaw itself
+#     now caps its reserve at a quarter of the window, which fixed condensing a 32k conversation nearly every turn.)
 #   * discovery.mdns.mode off: OpenClaw otherwise announces the gateway on the local network.
+#   * plugins.allow: OpenClaw turns on ~40 bundled plugins by default (cloud model providers, online speech services,
+#     computer control, file transfer to paired devices). Only what this stack uses may load.
+#   * tools.codeMode and tools.toolSearch off: by default OpenClaw may show the model only `exec` (Code Mode) or a search
+#     over its tools (Tool Search) instead of the tools themselves. A local model then loops: one question ran 3.5 minutes
+#     of exec / tool_search / tool_call calls without answering. With both off it calls web_search, read, write directly.
+#   * models.catalogRefresh off: otherwise the gateway downloads a model and price list from catalog.openclaw.ai at start
+#     and every six hours. (Its plugin catalog download from clawhub.ai has no setting; patches/ keep that one offline.)
 #   * bootstrapMaxChars: the default 20000 silently truncates long instruction files (AGENTS.md etc.) each turn.
 #   * userTimezone: without it, timestamps are UTC and the agent says "good morning" at 9 pm.
 #   * a pinned auth token: a regenerated token makes the browser lose its pairing ("token mismatch").
@@ -50,43 +58,62 @@ vis=$(curl -s -m 5 "http://127.0.0.1:$LLAMA_PORT/props" 2>/dev/null | python3 -c
 [ -n "$vis" ] || { vision_file_ok && vis=yes || vis=no; }
 INPUT='["text"]'; [ "$vis" = yes ] && INPUT='["text","image"]'
 oc gateway.mode local
-oc update.checkOnStart false     # no npm "new version" check on every start; the patches need exactly $OPENCLAW_VERSION anyway
+oc update.checkOnStart false     # no npm "new version" check on every start; the patches need exactly $OPENCLAW_RELEASE anyway
+oc models.catalogRefresh.enabled false
+oc telemetry.enabled false       # off by default; set explicitly so nothing can turn it on unasked
+oc tools.codeMode '{"enabled":false}'
+oc tools.toolSearch false
+# OpenClaw's "dreaming" (on by default) runs a daily 3 am model job that rewrites MEMORY.md and keeps a DREAMS.md diary.
+# This stack has its own memory (services/memory_service.py, docs/MEMORY.md) and scheduled research; a second system
+# quietly editing the agent's notes overnight would be a surprise. Off, so the agent's files change only when it works.
+oc plugins.entries.memory-core.config.dreaming.enabled false
+# Only the plugins this stack uses: OpenClaw's own memory tools, its web-page reader, and the search plugin chosen below.
+PLUGINS='"memory-core","web-readability"'
 oc gateway.port "$GATEWAY_PORT"
 # The provider is written as ONE object: on a fresh config, setting `.api` alone fails validation until baseUrl and
 # models exist (found in a clean-machine rehearsal; it only "worked" on the second run, which hid it).
 oc models.providers.ollama "{\"baseUrl\":\"http://127.0.0.1:$SHIM_PORT/v1\",\"apiKey\":\"local-no-key\",\"api\":\"openai-completions\",\"models\":[{\"id\":\"$MODEL_ALIAS\",\"name\":\"$MODEL_ALIAS\",\"api\":\"openai-completions\",\"maxTokens\":$MAX_REPLY_TOKENS,\"contextWindow\":$CTX,\"input\":$INPUT,\"cost\":{\"input\":0,\"output\":0,\"cacheRead\":0,\"cacheWrite\":0}}]}"
 oc agents.defaults.model "ollama/$MODEL_ALIAS"
 oc agents.defaults.bootstrapMaxChars "$BOOTSTRAP_MAX_CHARS"
-# When to condense the conversation (lib.sh explains the numbers). Both reserve keys: OpenClaw uses the larger one.
-oc agents.defaults.compaction.reserveTokens "$COMPACTION_RESERVE_TOKENS"
-oc agents.defaults.compaction.reserveTokensFloor "$COMPACTION_RESERVE_TOKENS"
+# How much recent conversation survives condensing word for word (lib.sh explains the number)
 oc agents.defaults.compaction.keepRecentTokens "$COMPACTION_KEEP_TOKENS"
 [ -n "${USER_TIMEZONE:-}" ] && oc agents.defaults.userTimezone "$USER_TIMEZONE"
 # No announcing this PC on the network: OpenClaw advertises its gateway by mDNS by default (seen in a packet capture).
-oc discovery.mdns.mode off
-oc discovery.wideArea.enabled false
+oc discovery.mdns.mode off      # (wide-area discovery stays off: it needs a domain, which is never set)
 # WEB_ACCESS=off (bin/security.sh web off): the agent never goes online. Both web tools off; the search case below is skipped.
 if [ "$WEB_ACCESS" = off ]; then oc tools.web.fetch.enabled false; else oc tools.web.fetch.enabled true; fi
+# A fetched page is cut at 30k characters (~7.5k tokens; OpenClaw's default 50k let 3-4 pages fill a small context).
+oc tools.web.fetch.maxChars 30000
 # The agent's web_search: Brave if you gave a key; otherwise the local SearXNG container (no account, no card) through
-# services/search_shim.py, using OpenClaw's Perplexity mode with our own address; otherwise off (it can still read links).
+# services/search_shim.py, which OpenClaw's official SearXNG plugin talks to; otherwise off (it can still read links).
+# Each is an OpenClaw plugin that bin/install.sh installs (pinned to the same release).
+# `openclaw plugins install` (bin/install.sh installs both providers) switches each one ON in the settings. Only the chosen
+# one stays on: with both on, OpenClaw adds the other to its allowlist by itself at start ("brave plugin config present,
+# added to plugin allowlist", seen in a fresh install's gateway log) and the privacy check would list it as an extra.
+oc plugins.entries.brave.enabled false; oc plugins.entries.searxng.enabled false
 case "$([ "$WEB_ACCESS" = off ] && echo off || search_wanted)" in
-  brave) oc tools.web.search.enabled true; oc tools.web.search.provider brave ;;
-  searxng)
-    oc tools.web.search.enabled true; oc tools.web.search.provider perplexity
-    oc tools.web.search.perplexity.baseUrl "http://127.0.0.1:$SEARCH_SHIM_PORT/v1"
-    oc tools.web.search.perplexity.apiKey local-searxng
-    oc tools.web.search.perplexity.model searxng ;;
+  brave) PLUGINS="$PLUGINS,\"brave\""; oc plugins.entries.brave.enabled true
+    oc tools.web.search.enabled true; oc tools.web.search.provider brave ;;
+  searxng) PLUGINS="$PLUGINS,\"searxng\""
+    oc plugins.entries.searxng "{\"enabled\":true,\"config\":{\"webSearch\":{\"baseUrl\":\"http://127.0.0.1:$SEARCH_SHIM_PORT\"}}}"
+    oc tools.web.search.enabled true; oc tools.web.search.provider searxng ;;
   *) oc tools.web.search.enabled false ;;
 esac
-# Spoken replies: always the LOCAL voice server (services/voice_server.py), never OpenClaw's default "edge" provider,
-# which sends the text to an online Microsoft service. Without the voice add-on, spoken replies are off.
-# OpenClaw accepts any voice name for a custom OpenAI-style baseUrl. Its 30 s default timeout is too short for CPU speech;
-# 120000 ms is the most its config allows (a larger value fails validation and the whole setting is silently kept old).
+# Spoken replies: always the LOCAL voice server (services/voice_server.py), through OpenClaw's OpenAI speech provider with
+# our own address, never an online speech service (the Microsoft, Azure and ElevenLabs plugins aren't allowed to load).
+# Without the voice add-on, spoken replies are off. OpenClaw accepts any voice name for a custom baseUrl. Its 30 s default
+# timeout is too short for CPU speech; 120000 ms is the most its config allows.
 if [ -f "$VOICE_VENV/.installed" ]; then
-  oc messages.tts "{\"auto\":\"$VOICE_REPLIES\",\"provider\":\"openai\",\"timeoutMs\":120000,\"openai\":{\"baseUrl\":\"http://127.0.0.1:$VOICE_PORT/v1\",\"apiKey\":\"local-no-key\",\"model\":\"chatterbox\",\"voice\":\"$VOICE_NAME\"}}"
+  PLUGINS="$PLUGINS,\"openai\""
+  oc tts "{\"auto\":\"$VOICE_REPLIES\",\"provider\":\"openai\",\"timeoutMs\":120000,\"providers\":{\"openai\":{\"baseUrl\":\"http://127.0.0.1:$VOICE_PORT/v1\",\"apiKey\":\"local-no-key\",\"model\":\"chatterbox\",\"speakerVoice\":\"$VOICE_NAME\"}}}"
 else
-  oc messages.tts "{\"auto\":\"off\",\"provider\":\"openai\",\"openai\":{\"baseUrl\":\"http://127.0.0.1:$VOICE_PORT/v1\",\"apiKey\":\"local-no-key\"}}"
+  oc tts '{"auto":"off"}'
 fi
+# Everything the agent sends online is checked first (services/outbound_guard.py). The plugin loads from this repo.
+PLUGINS="$PLUGINS,\"outbound-guard\""
+oc plugins.load.paths "[\"$REPO/plugins/outbound-guard\"]"
+oc plugins.entries.outbound-guard '{"enabled":true}'
+oc plugins.allow "[$PLUGINS]"
 
 # Voice notes you SEND to the agent (Telegram etc.) are transcribed by the local speech-to-text server before the model
 # sees them (bin/stt-cli.sh). Without it the agent only gets "<media:audio>" and can't understand a voice note.

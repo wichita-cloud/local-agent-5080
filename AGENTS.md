@@ -29,6 +29,7 @@ Everything is bash and small Python programs. There is no build step, and every 
 | `bin/services-up.sh` | Start memory service, memory proxy and readiness gate (idempotent, one instance each). |
 | `bin/gateway-up.sh` | Write the OpenClaw config from the active profile, then (re)start the gateway and print the URL. |
 | `bin/privacy-check.sh`, `services/net_watch.py` | Checks that data stays on the PC: ports open to this PC only (and nothing answers through the LAN address), privacy settings, where data lives; `--live` packet-captures WSL (net_watch.py, root) and samples Windows' table for Docker's backend while the agent answers from memory. Evidence in `$STATE_DIR/privacy-check/`. Changes nothing. |
+| `services/outbound_guard.py`, `plugins/outbound-guard/`, `config/private-terms.example.txt` | Reads what the agent is about to send online; the plugin holds `web_search`, `web_fetch` and commands naming a web address, and `overnight.py` imports the same check. :18892. Fails closed. docs/SECURITY.md. |
 | `bin/verify.sh` | Layered health report. Fixes nothing. Exit 0 only if every layer passes. |
 | `bin/bench.sh` | Real speed test with a large, uncacheable prompt. Compares the result to the profile's expected numbers. |
 | `bin/gpu-release.sh` / `bin/gpu-restore.sh` | Game mode: free the 5080, then bring the model back and prove it's fast. |
@@ -38,7 +39,7 @@ Everything is bash and small Python programs. There is no build step, and every 
 | `guards/decode-floor.sh` | Cron guard: alarms if decode slows past a floor or free VRAM drops below a floor. |
 | `guards/services-watchdog.sh` | Cron guard: restarts a dead service (never llama; see game mode). |
 | `guards/crontab.example` | The cron entries `install.sh` installs. |
-| `patches/openclaw-2026.3.11/` | Signature-based patches to OpenClaw's bundled JS. `apply.sh` runs them and verifies the marker counts. |
+| `patches/openclaw-2026.10.9/` | Signature-based patches to OpenClaw's bundled JS (catalog kept offline; optional Jina fallback). `apply.sh` runs them and verifies the marker counts. The pinned release is `OPENCLAW_RELEASE` in `bin/lib.sh`. |
 | `windows/gpu-check.ps1` | Reports which GPU drives the display and how much of the WSL VM's GPU memory has spilled to system RAM. |
 | `windows/set-igpu-preference.ps1` | Pins apps (browser and so on) to the integrated GPU. |
 | `windows/wslconfig.example` | The `.wslconfig` this was tested with. |
@@ -86,14 +87,18 @@ Breaking any of these causes a failure that is easy to miss. The reasoning is in
     (`flock -n`) silently skips every tick after its first repair. Check with `fuser ~/.local/state/local-agent/*.lock`:
     only running scripts should appear, never a service.
 15. **The voice never uses the GPU, and never a cloud service.** `voice_server.py` hides CUDA; `gateway-up.sh` always points
-    OpenClaw's `messages.tts` at the local server (OpenClaw's default provider sends text to an online service). Keep
+    OpenClaw's `tts` at the local server (OpenClaw's default provider sends text to an online service). Keep
     Chatterbox's watermark on, and keep the consent step in `voice.sh add`. Listening is local too: `stt_server.py` hides CUDA,
     binds loopback, and never logs what was said.
+
+16. **The outbound guard fails closed, unlike the memory proxy (8).** Nothing on the chat path depends on it, so when it is down
+    the web tools stop instead. It must never log the words it checks, and it checks what is said, never a topic: don't add topics.
 
 ## How to test a change
 ```bash
 bash -n bin/*.sh guards/*.sh            # syntax
-python3 -m py_compile services/*.py console/server.py bin/mtp-graft.py patches/openclaw-2026.3.11/*.py
+python3 -m py_compile services/*.py console/server.py bin/mtp-graft.py patches/openclaw-*/*.py
+python3 services/outbound_guard.py selftest
 bin/verify.sh                           # every layer, exit 0 = all pass
 bin/bench.sh                            # speed is part of correctness here
 ```

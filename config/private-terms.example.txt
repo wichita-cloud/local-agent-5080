@@ -1,0 +1,9 @@
+# private-terms.txt: what you consider private. Copy this file to config/private-terms.txt (it is git-ignored).
+# One word or phrase per line, any capitals. The agent's searches and web addresses are checked against it: a match
+# stops and asks you before anything leaves. Changes take effect straight away.
+#
+# Examples (remove the # to use one):
+#Lincoln County
+#Jane Doe
+#Project Ember
+#Dr Patel

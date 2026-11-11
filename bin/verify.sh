@@ -113,9 +113,9 @@ cw=$(openclaw config get models.providers.ollama.models 2>/dev/null | grep -oE '
 [ "$standby" = 1 ] && srv_ctx=${CTX:-}   # not loaded: compare with the profile it will load
 if [ -n "$cw" ] && [ "$cw" = "${srv_ctx:-x}" ]; then pass "OpenClaw contextWindow $cw = llama -c"
 else fail "OpenClaw contextWindow ${cw:-?} ≠ llama -c ${srv_ctx:-?}"; hint "bin/gateway-up.sh rewrites it from the profile"; fi
-if [ -x "$REPO/patches/openclaw-$OPENCLAW_VERSION/apply.sh" ]; then
-  if "$REPO/patches/openclaw-$OPENCLAW_VERSION/apply.sh" --check >/dev/null 2>&1; then pass "OpenClaw patches present (marker counts as expected)"
-  else caution "OpenClaw patches missing or partial" "the agent still runs, but some tool calls (reading web pages, editing files) may be less reliable"; hint "patches/openclaw-$OPENCLAW_VERSION/apply.sh --check shows which; re-apply with sudo -E …/apply.sh"; fi
+if [ -x "$REPO/patches/openclaw-$OPENCLAW_RELEASE/apply.sh" ]; then
+  if "$REPO/patches/openclaw-$OPENCLAW_RELEASE/apply.sh" --check >/dev/null 2>&1; then pass "OpenClaw patches present (marker counts as expected)"
+  else caution "OpenClaw patches missing or partial" "the agent still runs, but OpenClaw may contact clawhub.ai at every start (docs/SECURITY.md)"; hint "patches/openclaw-$OPENCLAW_RELEASE/apply.sh --check shows which; re-apply with …/apply.sh, then bin/gateway-up.sh"; fi
 fi
 if [ "${SECURITY_PROFILE:-standard}" = protected ]; then
   smode=$(openclaw config get agents.defaults.sandbox.mode 2>/dev/null | tr -d '"[:space:]')
@@ -125,6 +125,9 @@ if [ "${SECURITY_PROFILE:-standard}" = protected ]; then
 else
   warn "security: Standard profile: the agent runs commands directly on this PC, which can reach your Windows drives. bin/security.sh set protected puts it in a sandbox (docs/SECURITY.md). Not counted"
 fi
+
+if curl -s -m 5 "http://127.0.0.1:$OUTBOUND_GUARD_PORT/health" 2>/dev/null | grep -q '"status": *"ok"'; then pass "outbound guard (:$OUTBOUND_GUARD_PORT)"
+else caution "outbound guard is not answering (:$OUTBOUND_GUARD_PORT)" "the web tools are blocked until it is back"; hint "bin/services-up.sh"; fi
 
 if [ "$(search_wanted)" = searxng ]; then
   if curl -s -m 5 "http://127.0.0.1:$SEARCH_SHIM_PORT/health" 2>/dev/null | grep -q '"searxng": *true'; then pass "agent web search (SearXNG via :$SEARCH_SHIM_PORT)"
@@ -138,13 +141,13 @@ if [ "${OVERNIGHT:-off}" = on ]; then
   fi
 fi
 # Empty files the agent wrote. A write that loses its data still reports success (the Protected profile did exactly this
-# until patch 13), so read the result: a 0-byte note or project file means something wiped it. HEARTBEAT.md ships empty.
+# on OpenClaw 2026.3.11), so read the result: a 0-byte note or project file means something wiped it. HEARTBEAT.md ships empty.
 WS="${OPENCLAW_WORKSPACE:-$HOME/.openclaw/workspace}"
 if [ -d "$WS" ]; then
   empty=$(find "$WS" -maxdepth 3 -type f -name '*.md' -size 0 ! -name HEARTBEAT.md ! -path "$WS/.openclaw/*" 2>/dev/null)
   if [ -z "$empty" ]; then pass "agent's notes and files: none empty"
   else caution "$(echo "$empty" | wc -l) of the agent's files are EMPTY: $(echo "$empty" | sed "s#^$WS/##" | head -5 | paste -sd' ')" "what the agent saved there is gone; ask it to write them again"
-       hint "patches/openclaw-$OPENCLAW_VERSION/apply.sh --check (patch 13 fixes sandboxed writes); docs/TROUBLESHOOTING.md"; fi
+       hint "docs/TROUBLESHOOTING.md (an empty file the agent says it saved)"; fi
 fi
 
 layer "6 GPU memory (the silent 6x slowdown)"

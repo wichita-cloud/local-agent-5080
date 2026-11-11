@@ -46,6 +46,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import outbound_guard
+
 E = os.environ.get
 STATE = os.path.expanduser(E("STATE_DIR", "~/.local/state/local-agent"))
 ODIR = os.path.join(STATE, "overnight")
@@ -138,12 +140,16 @@ def busy_reason(c):
     except Exception:
         pass
     newest = 0
-    for pat in ("~/.openclaw/agents/*/sessions/*.jsonl", "~/.openclaw/agents/*/sessions/*.json"):
-        for f in glob.glob(os.path.expanduser(pat)):
-            try:
-                newest = max(newest, os.path.getmtime(f))
-            except OSError:
-                pass
+    # OpenClaw keeps each agent's chats in one SQLite file; session_participants records when a conversation was last
+    # prompted (milliseconds). Heartbeat runs don't count as prompts. Read-only, so a running gateway is never disturbed.
+    import sqlite3
+    for f in glob.glob(os.path.expanduser("~/.openclaw/agents/*/agent/openclaw-agent.sqlite")):
+        try:
+            db = sqlite3.connect("file:%s?mode=ro" % f, uri=True, timeout=5)
+            newest = max(newest, (db.execute("select max(last_prompted_at) from session_participants").fetchone()[0] or 0) / 1000)
+            db.close()
+        except sqlite3.Error:
+            pass
     if newest and time.time() - newest < c["idle"] * 60:
         return "you chatted with the agent in the last %d minutes" % c["idle"]
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -276,8 +282,15 @@ def _http_error_stop(provider, e):
     raise e
 
 
+def may_send(tool, text, url=False):
+    """Scheduled research has nobody to ask, so what the outbound guard would stop for is simply not sent."""
+    return outbound_guard.decide(tool, text, url)["action"] == "allow"
+
+
 def brave(query):
     """-> list of {title,url,description}; raises QuotaStop when Brave says the quota/rate is used up."""
+    if not may_send("overnight-search", query):
+        return []
     url = BRAVE_URL + "?" + urllib.parse.urlencode({"q": query[:300], "count": 5, "safesearch": "strict"})
     req = urllib.request.Request(url, headers={"Accept": "application/json", "X-Subscription-Token": BRAVE_KEY})
     try:
@@ -291,6 +304,8 @@ def brave(query):
 
 def tavily(query):
     """Tavily Search API (https://docs.tavily.com): POST /search, Bearer key; 429/432/433 mean rate or plan limit."""
+    if not may_send("overnight-search", query):
+        return []
     req = urllib.request.Request(TAVILY_URL, json.dumps({"query": query[:300], "max_results": 5, "search_depth": "basic", "include_answer": False}).encode(),
                                  {"Content-Type": "application/json", "Authorization": "Bearer " + TAVILY_KEY})
     try:
@@ -307,6 +322,8 @@ _searx_empty = {"n": 0}
 
 def searxng(query):
     """A local SearXNG container (bin/searxng.sh). It asks several search engines itself; some may refuse this PC for a while, which is normal."""
+    if not may_send("overnight-search", query):
+        return []
     url = SEARXNG_URL + "/search?" + urllib.parse.urlencode({"q": query[:300], "format": "json", "safesearch": 1})
     try:
         with urllib.request.urlopen(urllib.request.Request(url, headers={"Accept": "application/json"}), timeout=40) as r:
@@ -372,6 +389,8 @@ def public_host(url):
 
 def page_text(url):
     if not (public_host(url) or E("OVERNIGHT_ALLOW_LOCAL_FETCH") == "1"):     # the env switch exists for the test suite only
+        return ""
+    if not may_send("overnight-fetch", url, url=True):
         return ""
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (local-agent overnight research)", "Accept": "text/html,text/plain"})

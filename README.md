@@ -259,7 +259,7 @@ behavior removed may produce harmful or illegal content; use of such models
 is entirely at the user's own risk and responsibility.
 
 ## Status and honesty
-- Pinned and tested: llama.cpp image by digest (May 2026 build), OpenClaw **2026.3.11**, Ubuntu 22.04 on WSL2.
+- Pinned and tested: llama.cpp image by digest (May 2026 build), OpenClaw **2026.10.9** on Node 24, Ubuntu 22.04 on WSL2.
   The OpenClaw patches are written against that exact version, and they refuse to apply to anything else.
 - The numbers in these docs were measured on one machine. Your mileage will vary; `bin/bench.sh` tells you yours.
 - This is a hobby project shared as-is (MIT license). Issues and PRs are welcome.

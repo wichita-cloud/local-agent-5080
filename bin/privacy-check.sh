@@ -32,7 +32,7 @@ echo "Privacy check, $(date '+%Y-%m-%d %H:%M %Z'), profile ${PROFILE:-?}"
 
 echo; echo "1. Nothing can be reached from your network"
 ext=$(ss -tlnH 2>/dev/null | awk '{print $4}' | grep -v -E '^(127\.|\[::1\]|10\.255\.255\.254:53$)' | sort -u)
-for p in "$LLAMA_PORT" "$SHIM_PORT" "$RAG_PORT" "$MEMORY_PORT" "$GATEWAY_PORT" "$CONSOLE_PORT" "$SEARXNG_PORT" "$SEARCH_SHIM_PORT" "$VOICE_PORT" "$STT_PORT"; do
+for p in "$LLAMA_PORT" "$SHIM_PORT" "$RAG_PORT" "$MEMORY_PORT" "$GATEWAY_PORT" "$CONSOLE_PORT" "$SEARXNG_PORT" "$SEARCH_SHIM_PORT" "$OUTBOUND_GUARD_PORT" "$VOICE_PORT" "$STT_PORT"; do
   if printf '%s\n' "$ext" | grep -q -E ":$p\$"; then bad "port $p listens on a network address, not only on this PC"; fi
 done
 if [ -z "$ext" ]; then pass "every program in WSL listens on this PC only (127.0.0.1 / ::1)"
@@ -45,9 +45,9 @@ if command -v powershell.exe >/dev/null 2>&1; then
   # The real test: from Windows, try to reach each port through the PC's own network address, the way a phone or another
   # PC on your Wi-Fi would. A Windows port forward (netsh interface portproxy) can listen on all addresses and still
   # lead nowhere; only an answer counts.
-  ports="$LLAMA_PORT,$SHIM_PORT,$RAG_PORT,$MEMORY_PORT,$GATEWAY_PORT,$CONSOLE_PORT,$SEARXNG_PORT,$SEARCH_SHIM_PORT,$VOICE_PORT,$STT_PORT"
+  ports="$LLAMA_PORT,$SHIM_PORT,$RAG_PORT,$MEMORY_PORT,$GATEWAY_PORT,$CONSOLE_PORT,$SEARXNG_PORT,$SEARCH_SHIM_PORT,$OUTBOUND_GUARD_PORT,$VOICE_PORT,$STT_PORT"
   ps1="\$ips=@(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { \$_.InterfaceAlias -notmatch 'vEthernet|Loopback|WSL' -and \$_.IPAddress -notmatch '^(127\.|169\.254\.)' } | ForEach-Object { \$_.IPAddress }); foreach (\$ip in \$ips) { foreach (\$p in @($ports)) { try { \$r=Invoke-WebRequest -Uri \"http://\${ip}:\$p/\" -UseBasicParsing -TimeoutSec 4; \"ANSWER \${ip}:\$p HTTP \$(\$r.StatusCode)\" } catch { if (\$_.Exception.Response) { \"ANSWER \${ip}:\$p HTTP \$([int]\$_.Exception.Response.StatusCode)\" } } } }; Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { @($ports) -contains \$_.LocalPort -and \$_.LocalAddress -notmatch '^(127\.|::1\$)' } | ForEach-Object { \"OPEN \$(\$_.LocalAddress):\$(\$_.LocalPort)\" }; 'IPS ' + (\$ips -join ' ')"
-  wr=$(powershell.exe -NoProfile -EncodedCommand "$(printf '%s' "$ps1" | iconv -t UTF-16LE | base64 -w0)" 2>/dev/null | tr -d '')
+  wr=$(powershell.exe -NoProfile -EncodedCommand "$(printf '%s' "$ps1" | iconv -t UTF-16LE | base64 -w0)" 2>/dev/null | tr -d '\r')
   ans=$(printf '%s
 ' "$wr" | sed -n 's/^ANSWER //p'); open=$(printf '%s
 ' "$wr" | sed -n 's/^OPEN //p' | sort -u | tr '
@@ -62,26 +62,38 @@ fi
 echo; echo "2. The agent's settings"
 [ "$(oc discovery.mdns.mode)" = off ] && pass "it does not announce itself on the local network (mDNS off)" || bad "mDNS announcements are on (discovery.mdns.mode); bin/gateway-up.sh turns them off"
 [ "$(oc update.checkOnStart)" = false ] && pass "no update check when it starts" || note "OpenClaw checks for updates when it starts"
+[ "$(oc models.catalogRefresh.enabled)" = false ] && pass "no model-catalog download (catalog.openclaw.ai)" || bad "OpenClaw downloads its model catalog at start and every 6 hours (models.catalogRefresh); bin/gateway-up.sh turns it off"
+if "$REPO/patches/openclaw-$OPENCLAW_RELEASE/apply.sh" --check >/dev/null 2>&1; then pass "no plugin-catalog download (clawhub.ai) at start: patch in place"
+else bad "OpenClaw contacts clawhub.ai at every start: the patch that stops it is missing (patches/openclaw-$OPENCLAW_RELEASE/apply.sh)"; fi
 [ "$(oc diagnostics.otel.enabled)" = true ] && bad "diagnostics export (OpenTelemetry) is on" || pass "no diagnostics or usage data export (OpenTelemetry off)"
-tts=$(oc messages.tts.provider)
+[ "$(oc telemetry.enabled)" = true ] && bad "OpenClaw's feature statistics are on (telemetry.enabled)" || pass "no feature statistics (telemetry off)"
+# Only the plugins this stack uses may load. OpenClaw's defaults include online speech, cloud models and device control.
+extra=$(oc plugins.allow | tr -d '[]' | tr ',' '\n' | grep -v -x -E 'memory-core|web-readability|searxng|brave|openai|outbound-guard' | paste -sd' ')
+if [ "$(oc plugins.allow)" = "" ]; then bad "every bundled OpenClaw plugin may load (plugins.allow is empty); bin/gateway-up.sh limits them"
+elif [ -n "$extra" ]; then note "plugins allowed beyond this stack's own: $extra"
+else pass "only this stack's plugins may load: $(oc plugins.allow | tr -d '[]')"; fi
+tts=$(oc tts.provider)
 case "$tts" in ""|openai) pass "spoken replies, if on, use the local voice server only";; *) bad "spoken replies use '$tts', an online service";; esac
 if [ "${WEB_ACCESS:-on}" = off ]; then
   [ "$(oc tools.web.search.enabled)" != true ] && [ "$(oc tools.web.fetch.enabled)" != true ] && pass "web access is off: the agent never goes online" || bad "WEB_ACCESS=off, but a web tool is still on (run bin/gateway-up.sh)"
 else
   sp=$(oc tools.web.search.provider)
   case "$sp" in
-    perplexity) note "web search is on, through SearXNG on this PC: the search words the agent writes go to public search engines (bin/security.sh web off to stop)";;
+    searxng) note "web search is on, through SearXNG on this PC: the search words the agent writes go to public search engines (bin/security.sh web off to stop)";;
     brave) note "web search is on, through Brave: the search words the agent writes go to Brave, tied to your key";;
     *) note "web page reading is on: the addresses the agent opens are fetched from those sites";;
   esac
 fi
+if [ "${OUTBOUND_GUARD:-on}" = off ]; then note "the outbound guard is off: searches and web addresses are not checked for personal details"
+elif curl -s -m 5 "http://127.0.0.1:$OUTBOUND_GUARD_PORT/health" 2>/dev/null | grep -q '"status": *"ok"' && [[ "$(oc plugins.allow)" == *outbound-guard* ]]; then pass "the outbound guard checks every search and web address before it leaves"
+else bad "the outbound guard is not running (the web tools are blocked until it is): bin/services-up.sh, then bin/gateway-up.sh"; fi
 [ "${JINA_FALLBACK:-off}" = on ] && note "Jina reader is on: pages that refuse the agent are fetched through Jina, which sees their addresses" || pass "Jina reader is off"
 if [ "${SECURITY_PROFILE:-standard}" = protected ]; then
   [ "${SANDBOX_NETWORK:-off}" = off ] && [ "$(oc agents.defaults.sandbox.docker.network)" = none ] && pass "commands the agent runs have no internet (sandbox network: none)" || note "commands the agent runs can use the internet (SANDBOX_NETWORK=on)"
 else note "standard profile: commands the agent runs can use the internet like any program on your PC"; fi
 
 echo; echo "3. Where your data is kept"
-for d in "$OPENCLAW_WORKSPACE" "$HOME/.openclaw/agents" "$MEMORY_DB" "${BACKUP_DIR:-$HOME/local-agent-backups}"; do
+for d in "$OPENCLAW_WORKSPACE" "$HOME/.openclaw/agents" "$HOME/.openclaw/state" "$MEMORY_DB" "${BACKUP_DIR:-$HOME/local-agent-backups}"; do
   case "$(readlink -f "$d" 2>/dev/null || echo "$d")" in
     /mnt/*) bad "$d is on a Windows drive (cloud-synced folders upload it): keep it inside WSL";;
     *) pass "$d: inside this Ubuntu's own disk";;
@@ -111,7 +123,7 @@ if [ "$LIVE" = 1 ]; then
   log "asking the agent a memory-only question in a throwaway chat"
   sid="privacy-check-$$"
   ans=$(timeout 110 openclaw agent --session-id "$sid" --message "Using only your memory and notes, without searching the web or opening any page: what do you know about me? Two sentences." --timeout 100 2>&1 | tail -3)
-  rm -f "$HOME/.openclaw/agents/main/sessions/$sid".jsonl*
+  openclaw sessions delete "agent:main:explicit:$sid" --yes >/dev/null 2>&1
   echo "        its answer (first 200 characters): ${ans:0:200}"
   log "finishing the capture"; wait $NW $WP 2>/dev/null
   searches=$(awk -v a="$(date +%F) $t1" '$0 >= a' "$STATE_DIR/search-shim.stdout" 2>/dev/null | grep -c "search ok\|search failed" || true)
@@ -136,7 +148,7 @@ if not rows:
     line("PASS", "Docker (model server, search container, sandbox) connected to nothing outside")
 for r in rows:
     idle = r["first_seen"] < t_question
-    who = "Docker Desktop itself (its update and usage-statistics checks), not the agent" if idle else           ("the search container: the agent searched" if searches else "Docker Desktop itself (no search happened)")
+    who = "not the agent: Docker Desktop's own update and statistics checks, or a connection the search container kept open from an earlier search" if idle else           ("the search container: the agent searched" if searches else "Docker Desktop itself (no search happened)")
     line("note", "Docker: %s port %s %s, first seen %s (%s): %s" % (r["remote"], r["port"], r["reverse_name"], r["first_seen"],
                                                                    "while idle" if idle else "during the question", who))
 if searches:

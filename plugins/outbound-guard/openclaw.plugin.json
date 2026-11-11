@@ -1,0 +1,8 @@
+{
+  "id": "outbound-guard",
+  "name": "Outbound guard",
+  "description": "Checks what the agent is about to send to the internet, and asks you when it finds something personal.",
+  "categories": ["security"],
+  "activation": { "onStartup": true },
+  "configSchema": { "type": "object", "additionalProperties": false }
+}

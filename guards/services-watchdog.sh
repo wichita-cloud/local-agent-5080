@@ -55,6 +55,7 @@ if [ -f "$STATE_DIR/searxng.enabled" ] && docker_ok && [ "$(docker inspect -f '{
     "$REPO/bin/searxng.sh" up >>"$LOG" 2>&1 && tslog "$LOG" "  SearXNG back" || { tslog "$LOG" "  SearXNG restart FAILED"; date +%s >> "$STATE_DIR/watchdog.searxng.fails"; }
   fi
 fi
+check outbound-guard "$OUTBOUND_GUARD_PORT" "http://127.0.0.1:$OUTBOUND_GUARD_PORT/health" "$REPO/bin/services-up.sh"
 [ "$(search_wanted)" = searxng ] && check search-shim "$SEARCH_SHIM_PORT" "http://127.0.0.1:$SEARCH_SHIM_PORT/health" "$REPO/bin/services-up.sh"
 check gateway        "$GATEWAY_PORT" "http://127.0.0.1:$GATEWAY_PORT/health"  "$REPO/bin/gateway-up.sh"
 exit 0

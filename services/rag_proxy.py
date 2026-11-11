@@ -71,8 +71,8 @@ SEARCH_NOTE = ("(Automatic note: you have web_search. If the answer could depend
                "not offer to search: search.)")
 CONTEXT_WARN = os.environ.get("CONTEXT_WARN", "1") != "0"
 def compaction_reserve(n_ctx):
-    """The reserve gateway-up.sh gives OpenClaw for this window (the formula is in bin/lib.sh load_profile)."""
-    return min(20000, max(12000, n_ctx * 3 // 8))
+    """OpenClaw's reserve for this window: 20000, but never more than a quarter of it (its agent-settings rule)."""
+    return min(20000, n_ctx // 4)
 CTX_NOTE_SOON = ("(Automatic note: this conversation has used about {pct}% of the room it has before older messages "
                  "are condensed. After your answer, add one short line telling the user this, and that the important "
                  "points will be saved first.)")
@@ -220,7 +220,7 @@ def context_note(msgs, idx, qtext, blen=0):
             used = blen // 4
         room = n_ctx - compaction_reserve(n_ctx)
         # A small window is mostly the agent's own ~11k fixed prompt: warning there would fire on every turn,
-        # so it only applies when the room left is big enough to mean something (a 32k window leaves ~20k).
+        # so it only applies when the room left is big enough to mean something (a 32k window leaves ~24k).
         if n_ctx and room >= 20000 and used > 0:
             pct = min(99, int(100 * used / room))
             note = CTX_NOTE_NOW.format(pct=pct) if pct >= 90 else CTX_NOTE_SOON.format(pct=pct) if pct >= 75 else ""
@@ -277,9 +277,10 @@ def maybe_inject(body):
 def ask_for_usage(body):
     """Ask llama to end each streamed reply with its token counts (stream_options.include_usage).
 
-    OpenClaw 2026.3.11 never asks for them from a non-OpenAI server, so every reply was recorded as 0 tokens and
+    OpenClaw 2026.3.11 never asked for them from a non-OpenAI server, so every reply was recorded as 0 tokens and
     OpenClaw never knew how full the conversation was: it did not condense or save memory before the window filled up.
-    Its parser reads the counts whenever they arrive, so asking on its behalf is enough. Fails open."""
+    Its parser reads the counts whenever they arrive, so asking on its behalf is enough. Kept for 2026.10.9, where usage
+    is recorded and condensing works with it in place. Fails open."""
     try:
         payload = json.loads(body)
         if not payload.get("stream") or "include_usage" in (payload.get("stream_options") or {}):

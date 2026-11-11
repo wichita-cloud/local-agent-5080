@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# apply.sh [--check]: apply (or just verify) the OpenClaw 2026.3.11 patches, in order, and prove they landed.
+# apply.sh [--check]: apply (or just verify) the OpenClaw 2026.10.9 patches, in order, and prove they landed.
 #
 # Each NN-*.py patch is signature-based: it only edits code that matches exactly what it expects. If the signature
 # isn't there (a different OpenClaw version), it refuses and changes nothing. Each is idempotent (re-running is a
-# no-op) and keeps a backup of every file it edits (*.bak / *.pre-*).
+# no-op) and keeps a backup of every file it edits (*.bak).
 #
 # Success is judged by MARKER COUNTS afterwards, not by the scripts' own output. One of the original patch runners
 # grepped its output for the word "patched", which also appears in "patched=0", so it reported success for weeks.
 #
 # Env: OPENCLAW_DIST       the openclaw/dist directory (default: $(npm root -g)/openclaw/dist)
-#      OPENCLAW_WORKSPACE  the agent workspace, for the path-normalize patch (default: ~/.openclaw/workspace)
+#      OPENCLAW_WORKSPACE  the agent workspace (default: ~/.openclaw/workspace)
 # Reinstalling or upgrading openclaw replaces dist/ and removes the patches. Re-run this afterwards.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -22,23 +22,10 @@ export OPENCLAW_DIST OPENCLAW_WORKSPACE="${OPENCLAW_WORKSPACE:-$HOME/.openclaw/w
 
 # marker | files expected to carry it | patch script
 TABLE="
-__LOCAL_AGENT_TEXT_TOOLCALL_PARSER_PATCHED__|1|01-text-toolcall-parser.py
-TEXT_TOOLCALL_BARE_PATTERN_V1|1|02-text-toolcall-bare-shape.py
-TEXT_TOOLCALL_WRAPPED_JSON_V1|1|03-text-toolcall-wrapped-json.py
-TEXT_TOOLCALL_BASH_FENCE_V1|1|04-text-toolcall-bash-fence.py
-TEXT_TOOLCALL_ELIDED_FUNC_V1|1|05-text-toolcall-elided-function.py
-TEXT_TOOLCALL_NESTED_UNWRAP_V1|1|06-text-toolcall-nested-unwrap.py
-TEXT_TOOLCALL_JSON_PATH_ARRAY_V1|1|07-text-toolcall-json-path-array.py
-ALIAS_NORMALIZE_PATCH_V4|4|08-param-alias-normalize.py
-COMPACTION_SAFEGUARD_PATCH|3|09-compaction-safeguard.py
-WEB_FETCH_MAXCHARS_PATCH_V1|4|10-webfetch-maxchars.py
-LOCAL_AGENT_CONTROLUI_HIDE_WORKING_V1|1|11-controlui-hide-working-output.py
-LOCAL_AGENT_CONTROLUI_HIDE_TOOLCARDS_V1|1|12-controlui-hide-tool-cards.py
-LOCAL_AGENT_SANDBOX_WRITE_STDIN_V1|4|13-sandbox-write-stdin.py
-LOCAL_AGENT_CONTROLUI_WORKING_STATUS_V1|1|14-controlui-working-status.py
-LOCAL_AGENT_JINA_FALLBACK_V1|4|15-webfetch-jina-fallback.py"
+LOCAL_AGENT_CATALOG_OFFLINE_V1|1|01-plugin-catalog-offline.py
+LOCAL_AGENT_JINA_FALLBACK_V1|1|02-webfetch-jina-fallback.py"
 
-count() { grep -l "$1" "$OPENCLAW_DIST"/*.js "$OPENCLAW_DIST"/control-ui/assets/index-*.js 2>/dev/null | wc -l; }
+count() { grep -l "$1" "$OPENCLAW_DIST"/*.mjs "$OPENCLAW_DIST"/*.js 2>/dev/null | wc -l; }
 
 if [ "${1:-}" != "--check" ]; then
   echo "applying patches to $OPENCLAW_DIST"

@@ -3,7 +3,7 @@
 #
 #   1. apt packages            (sudo)
 #   2. cron autostart on boot  (sudo; WSL here doesn't run systemd, so /etc/rc*.d is never processed)
-#   3. Node 22 via nvm + OpenClaw pinned to $OPENCLAW_VERSION (user-level, so no sudo needed for patches)
+#   3. Node $NODE_MAJOR via nvm + OpenClaw pinned to $OPENCLAW_RELEASE and its search plugins (user-level: no sudo for patches)
 #   4. Python venv for the services, with CPU-only PyTorch (the CUDA build is ~2 GB larger and must not touch the GPU)
 #   5. OpenClaw patches (verified by marker count)
 #   6. default character files (only where none exist yet)
@@ -59,7 +59,7 @@ if grep -qiE '^[[:space:]]*systemd[[:space:]]*=[[:space:]]*true' /etc/wsl.conf 2
   warn "  (Exec format error). This stack does not need it. If bin/verify.sh reports that, see docs/TROUBLESHOOTING.md"
 fi
 
-log "3/9 Node + OpenClaw $OPENCLAW_VERSION"
+log "3/9 Node + OpenClaw $OPENCLAW_RELEASE"
 # WSL appends the Windows PATH, which can include Windows' own node/npm (C:\Program Files\nodejs). The nvm installer
 # and npm would then call the WINDOWS npm ("ENOENT ... AppData\Roaming\npm"). Hide /mnt/c paths while setting up Node.
 PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '^/mnt/' | paste -sd: -); export PATH
@@ -67,12 +67,19 @@ if [ ! -s "$HOME/.nvm/nvm.sh" ]; then
   curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash >/dev/null || die "nvm install failed"
 fi
 . "$HOME/.nvm/nvm.sh"
-nvm install 22 >/dev/null && nvm alias default 22 >/dev/null
+nvm install "$NODE_MAJOR" >/dev/null && nvm alias default "$NODE_MAJOR" >/dev/null && nvm use "$NODE_MAJOR" >/dev/null || die "Node $NODE_MAJOR install failed"
 have=$(openclaw --version 2>/dev/null | grep -oE '[0-9]{4}\.[0-9]+\.[0-9]+' | head -1)
-if [ "$have" != "$OPENCLAW_VERSION" ]; then
-  npm install -g "openclaw@$OPENCLAW_VERSION" >/dev/null 2>&1 || die "npm install openclaw@$OPENCLAW_VERSION failed"
+if [ "$have" != "$OPENCLAW_RELEASE" ]; then
+  # npm skips OpenClaw's install scripts by default; they only tidy files left by an earlier version.
+  npm install -g "openclaw@$OPENCLAW_RELEASE" >/dev/null 2>&1 || die "npm install openclaw@$OPENCLAW_RELEASE failed"
 fi
 ok "openclaw $(openclaw --version 2>/dev/null | head -1)"
+# Web search providers are separate official plugins now, pinned to the same release. Installed whether or not they are
+# used: bin/gateway-up.sh only lets the chosen one load (SearXNG through services/search_shim.py, or Brave with a key).
+for plug in searxng brave; do
+  if openclaw plugins list 2>/dev/null | grep -q "@openclaw/$plug-plugin"; then continue; fi
+  openclaw plugins install "@openclaw/$plug-plugin@$OPENCLAW_RELEASE" >/dev/null 2>&1 || warn "could not install the $plug search plugin; web search may not work"
+done
 
 log "4/9 Python venv (services)"
 if [ ! -x "$VENV/bin/python3" ]; then python3 -m venv "$VENV" || die "venv creation failed"; fi
@@ -85,7 +92,7 @@ ok "venv ready ($VENV)"
 
 log "5/9 OpenClaw patches"
 OPENCLAW_DIST="$(npm root -g)/openclaw/dist" OPENCLAW_WORKSPACE="$OPENCLAW_WORKSPACE" \
-  "$REPO/patches/openclaw-$OPENCLAW_VERSION/apply.sh" || warn "some patches did not apply (see above). The agent works without them, but tool calls are less reliable"
+  "$REPO/patches/openclaw-$OPENCLAW_RELEASE/apply.sh" || warn "some patches did not apply (see above). The agent works without them, but tool calls are less reliable"
 
 log "6/9 default character (only into an empty workspace)"
 # Copies characters/default/* for any file that doesn't exist yet. Never overwrites: the workspace holds YOUR agent's

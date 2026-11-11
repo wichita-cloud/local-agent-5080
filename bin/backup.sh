@@ -9,7 +9,8 @@
 # What a backup holds (in $BACKUP_DIR/<date-time>/, default ~/local-agent-backups; the newest BACKUP_KEEP=14 are kept):
 #   workspace.tar.gz   the agent's files: its notes (memory/), projects/, knowledge/ (what you taught it), USER.md, ...
 #   memories.jsonl.gz  every memory in the memory store, as text + metadata (version-proof: restoring re-adds them)
-#   openclaw.tar.gz    OpenClaw's settings, chat history (agents/), paired devices (no logs, no workspace: separate)
+#   openclaw.tar.gz    OpenClaw's settings, chat history (SQLite databases, copied consistently), paired devices
+#                      (no logs, caches or workspace: separate)
 #   config.tar.gz      config/*.env (your settings and keys), the memory archive (retired memories: their undo) and the
 #                      small state files (overnight ideas, check histories). Kept private (chmod 600).
 #   MANIFEST.txt       sizes, entry counts, SHA-256 of each archive, and the result. SHA256SUMS for `sha256sum -c`.
@@ -44,7 +45,10 @@ take() {   # take [label]
   arch() {   # arch <name> <tar args...>: write, then read back
     local out="$root/$1.tar.gz"; shift
     tar czf "$out" "$@" 2>>"$root/tar-errors.txt"
-    local n; n=$(tar tzf "$out" 2>/dev/null | wc -l)
+    readback "$out"
+  }
+  readback() {
+    local out="$1" n; n=$(tar tzf "$out" 2>/dev/null | wc -l)
     if [ ! -s "$out" ] || [ "$n" -eq 0 ]; then say "  FAIL  $(basename "$out") (empty or unreadable)"; fail=1
     else say "  ok    $(printf '%-20s' "$(basename "$out")") $(du -h "$out" | cut -f1)  $n entries"; fi
   }
@@ -63,8 +67,23 @@ take() {   # take [label]
   else
     say "  FAIL  memories: the memory service did not answer (bin/services-up.sh), so the store was not saved"; fail=1
   fi
-  local oc; oc="$(dirname "$WS")"
-  arch openclaw -C "$oc" --exclude="./$(basename "$WS")" --exclude='./logs' --exclude='*.bak*' .
+  # OpenClaw keeps chats and state in SQLite databases that the gateway writes while it runs. Copying those files with tar
+  # can catch one mid-write, so each is copied with SQLite's own backup (a consistent snapshot) and archived in its place.
+  local oc snap; oc="$(dirname "$WS")"; snap=$(mktemp -d)
+  python3 - "$oc" "$snap" "$(basename "$WS")" <<'PY' 2>>"$root/tar-errors.txt" || { say "  FAIL  OpenClaw's databases could not be copied"; fail=1; }
+import os, sqlite3, sys
+src, dst, ws = sys.argv[1:]
+for d, dirs, files in os.walk(src):
+    dirs[:] = [x for x in dirs if os.path.relpath(os.path.join(d, x), src) not in (ws, "logs", "tmp", "cache")]
+    for f in files:
+        if f.endswith(".sqlite"):
+            out = os.path.join(dst, os.path.relpath(os.path.join(d, f), src)); os.makedirs(os.path.dirname(out), exist_ok=True)
+            a = sqlite3.connect("file:%s?mode=ro" % os.path.join(d, f), uri=True, timeout=30); b = sqlite3.connect(out)
+            a.backup(b); b.close(); a.close()
+PY
+  tar cf "$root/openclaw.tar" -C "$oc" --exclude="./$(basename "$WS")" --exclude='./logs' --exclude='./tmp' --exclude='./cache'       --exclude='*.bak*' --exclude='*.sqlite' --exclude='*.sqlite-wal' --exclude='*.sqlite-shm' --exclude='*.lock' . 2>>"$root/tar-errors.txt"     && tar rf "$root/openclaw.tar" -C "$snap" . 2>>"$root/tar-errors.txt" && gzip -f "$root/openclaw.tar"
+  rm -rf "$snap"
+  readback "$root/openclaw.tar.gz"
   local cfg=() ; for p in "$REPO/config/stack.env" "$REPO/config/secrets.env"; do [ -f "$p" ] && cfg+=("$p"); done
   [ -d "$ARCHIVE_DIR" ] && cfg+=("$ARCHIVE_DIR")
   while IFS= read -r f; do cfg+=("$f"); done < <(find "$STATE_DIR" -maxdepth 2 \( -name '*.json' -o -name '*.jsonl' \) 2>/dev/null)
@@ -127,7 +146,11 @@ restore() {
     openclaw|config)
       [ "$over" = 1 ] || { warn "$w replaces live settings: add --overwrite to restore it"; continue; }
       [ -f "$src/$w.tar.gz" ] || { warn "no $w in this backup"; continue; }
-      if [ "$w" = openclaw ]; then tar xzf "$src/openclaw.tar.gz" -C "$(dirname "$WS")"; else tar xzPf "$src/config.tar.gz"; fi
+      if [ "$w" = openclaw ]; then
+        # a database's leftover write-ahead files belong to the version being replaced; SQLite would replay them into the restored copy
+        find "$(dirname "$WS")" -path "$WS" -prune -o \( -name '*.sqlite-wal' -o -name '*.sqlite-shm' \) -print0 2>/dev/null | xargs -0 -r rm -f
+        tar xzf "$src/openclaw.tar.gz" -C "$(dirname "$WS")"
+      else tar xzPf "$src/config.tar.gz"; fi
       ok "$w restored. Run bin/up.sh so the agent uses it" ;;
   esac; done
 }

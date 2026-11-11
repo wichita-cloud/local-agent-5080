@@ -180,7 +180,7 @@ transcribed by the local speech-to-text (`bin/stt-cli.sh`) before the agent read
 | `services/stt_server.py` | speech-to-text on `127.0.0.1:$STT_PORT` (8890): `POST /v1/audio/transcriptions` (OpenAI style, or raw audio). faster-whisper, int8, CPU, pinned to `VOICE_CPUSET`, voice-activity filter, one recording at a time, logs timings and never the words. Same venv; its own marker (`.stt-installed`) is written after the model is cached |
 | `bin/stt-cli.sh` | the small wrapper OpenClaw runs for each voice note you send (`tools.media.audio`); `bin/voice.sh listen <file>` uses it too |
 | `bin/voice.sh` | `add / remove / list / use / say / listen / talk / status / wait`. The console calls these |
-| `bin/gateway-up.sh` | sets OpenClaw's `messages.tts` to the local server (never the online default), timeout 120 s (OpenClaw's maximum; `nano` speaks a full 1,500-character reply well inside it, `turbo` may not) |
+| `bin/gateway-up.sh` | sets OpenClaw's `tts` to the local server (never the online default), timeout 120 s (OpenClaw's maximum; `nano` speaks a full 1,500-character reply well inside it, `turbo` may not) |
 | `bin/services-up.sh`, watchdog, `verify.sh` | start, restart and check it, only when it's installed |
 
 ## Troubleshooting
@@ -193,7 +193,7 @@ transcribed by the local speech-to-text (`bin/stt-cli.sh`) before the agent read
 | The microphone button is missing or greyed | Voice tab status; `tail ~/.local/state/local-agent/stt-server.log` | missing = speech-to-text not installed (re-run `bin/voice-install.sh`); greyed = still loading (~10 s) or down (`bin/services-up.sh`) |
 | "The microphone is blocked" | the browser's address-bar permission | allow the microphone for the console page; open it as `http://localhost:<port>`, not an IP address (browsers only allow the mic on localhost or https) |
 | It hears the wrong words | the "I heard:" line under the box | speak closer to the mic, or set `STT_MODEL=medium.en` and re-run `bin/voice-install.sh` |
-| Voice notes don't arrive in a messaging app | `openclaw config get messages.tts` | `bin/gateway-up.sh`; `VOICE_REPLIES` must not be `off` |
+| Voice notes don't arrive in a messaging app | `openclaw config get tts` | `bin/gateway-up.sh`; `VOICE_REPLIES` must not be `off` |
 
 **Uninstall:** `rm -rf ~/.local/share/local-agent/voice-venv ~/.cache/huggingface/hub/models--ResembleAI--chatterbox-* ~/.cache/huggingface/hub/models--Systran--faster-whisper-*`,
 then `bin/gateway-up.sh` (spoken replies switch off). Your recordings stay in `~/.local/share/local-agent/voices/` until

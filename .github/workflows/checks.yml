@@ -29,6 +29,8 @@ jobs:
         run: STATE_DIR=/tmp/ov python3 services/overnight.py selftest
       - name: agent web-search shim (recency words, result format)
         run: python3 services/search_shim.py selftest
+      - name: outbound guard (finds identifiers, leaves ordinary searches alone)
+        run: python3 services/outbound_guard.py selftest
 
   memory-service-packages:
     # bin/install.sh step 4, on the Ubuntu this was built on (22.04) and the next one (24.04, Python 3.12)
@@ -66,10 +68,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-      - name: install the pinned openclaw (config/stack.env.example) into a scratch prefix
+          node-version: 24
+      - name: install the pinned openclaw (bin/lib.sh) into a scratch prefix
         run: |
-          v=$(sed -n 's/^OPENCLAW_VERSION=\([^ ]*\).*/\1/p' config/stack.env.example)
+          v=$(sed -n 's/^OPENCLAW_RELEASE=\([^ ]*\) .*/\1/p' bin/lib.sh)
           npm install -q --prefix /tmp/oc "openclaw@$v"
       - name: apply, then verify by marker count
         env:

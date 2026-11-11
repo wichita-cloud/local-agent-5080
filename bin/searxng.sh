@@ -44,6 +44,13 @@ case "$cmd" in
       sed "s/__SECRET__/$secret/" "$REPO/docker/searxng-settings.yml" > "$DIR/settings.yml"
       chmod 644 "$DIR/settings.yml"   # the container's user (not you) must be able to read it; the secret only signs its own cookies, which this setup doesn't use
     fi
+    # Docker is shared by every WSL Ubuntu on the PC: a running container with this name on ANOTHER port belongs to another
+    # copy of this stack (preflight moved our port because that one was taken). Say so instead of "already running" and then
+    # failing its test search; never remove it (that would take the other copy's search away).
+    have_port=$(docker port "$NAME" 8080 2>/dev/null | grep -oE '[0-9]+$' | head -1)
+    if [ "$(docker inspect -f '{{.State.Running}}' "$NAME" 2>/dev/null)" = true ] && [ -n "$have_port" ] && [ "$have_port" != "$SEARXNG_PORT" ]; then
+      die "a SearXNG container named $NAME is already running on port $have_port, from another copy of this stack on this PC. Share it (set SEARXNG_PORT=$have_port in config/stack.env) or stop it from that copy (bin/searxng.sh down) first"
+    fi
     if [ "$(docker inspect -f '{{.State.Running}}' "$NAME" 2>/dev/null)" != true ]; then
       docker rm -f "$NAME" >/dev/null 2>&1
       docker image inspect "$IMAGE" >/dev/null 2>&1 || { log "pulling the SearXNG image (~380 MB)"; docker pull -q "$IMAGE" >/dev/null || die "couldn't pull the SearXNG image (network?)"; }

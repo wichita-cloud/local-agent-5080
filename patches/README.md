@@ -1,35 +1,34 @@
 # OpenClaw patches
 
-Small, surgical edits to OpenClaw's bundled JavaScript. They fix the ways a **local** model's tool calls go
-wrong. Hosted models rarely need them; Qwen-family models running locally do, often.
+Small, surgical edits to OpenClaw's bundled JavaScript, for what its settings can't do.
 
-**Pinned to OpenClaw 2026.3.11.** Each patch matches exact code signatures, and if the code isn't what it
-expects (a different version), it refuses and changes nothing. `apply.sh --check` shows a `MISSING` row
-for anything that didn't land. Upgrading or reinstalling OpenClaw replaces its `dist/` folder and removes all
-patches; re-run `apply.sh` afterwards. Porting to a new OpenClaw version means re-finding each signature.
+**Pinned to OpenClaw 2026.10.9** (`OPENCLAW_RELEASE` in `bin/lib.sh`). Each patch finds the code it changes by its
+content, not by file name (OpenClaw renames its bundles every release), and refuses to change anything if that code isn't
+there exactly once. `apply.sh --check` shows a `MISSING` row for anything that didn't land. Upgrading or reinstalling
+OpenClaw replaces its `dist/` folder and removes the patches; re-run `apply.sh` afterwards.
 
 | # | Patch | Problem it fixes |
 |---|---|---|
-| 01 | text-toolcall-parser | The model writes a tool call as **text** (`read(path="x")`, `<tool_call><function=read>…`) instead of structured `tool_calls`. Without this the user sees the text and nothing runs. Adds a parser that turns text-shaped calls for known tools into real calls. |
-| 02 | bare-shape | Same, for `tool_name\n{json}` with no wrapper. |
-| 03 | wrapped-json | Same, for `{"tool_call":{"name":…,"args":{…}}}`. |
-| 04 | bash-fence | The model "runs" commands by writing a ```` ```bash ```` block. Turns a fence that is the whole reply into an `exec` call. |
-| 05 | elided-function | Qwen drops the `<function` prefix and leaves `=web_fetch>`. Extends the name matcher. |
-| 06 | nested-unwrap | `exec` wrapping another tool's call (`exec {"command":"web_search …"}`); unwraps it to the real tool. |
-| 07 | json-path-array | Asked to "read A, B and C", the model emits a JSON array of `{"path":…}`. Turns it into N reads. |
-| 08 | param-alias-normalize | Wrong argument names (`filename`/`file` → `path`, `text`/`body` → `content`), a missing path derived from a markdown title, and invented absolute paths (`/memory/x`) remapped into the workspace. |
-| 09 | compaction-safeguard | Tool-heavy conversations could never be compacted (the safeguard didn't recognize tool roles), so long sessions hit the context wall. |
-| 10 | webfetch-maxchars | `web_fetch` returned up to 50k characters (~12.5k tokens); 3-4 fetches filled a 32-45k context. Lowered to 30k. |
-| 11 | controlui-hide-working-output | the dashboard chat shows raw tool output (whole web pages as JSON) by default; this makes it hidden by default. The dashboard's own toolbar button (brain icon) turns it back on. Edits `dist/control-ui`. |
-| 12 | controlui-hide-tool-cards | with that button off, the chat still showed a card for every tool call (the search query as JSON) and each tool's full output while a turn ran. Now those are hidden too, with the dashboard's own "working" dots shown instead. Button on: everything shows, as before. Edits `dist/control-ui`. |
-| 13 | sandbox-write-stdin | in the Protected profile every file the agent wrote came out EMPTY while the tool reported success ("Successfully wrote 1182 bytes"), and `edit` emptied existing files. OpenClaw fed its in-box Python helper both its program and the file data on the same stdin, so the data was lost. Now the data travels on its own descriptor. Edits 4 `dist/*.js` bundles. |
-| 14 | controlui-working-status | with the working output hidden, a turn that used tools showed only animated dots until the answer began; a minute spent writing a long file looked like a frozen chat. Now that spot reads e.g. "Working... last step: Writing projects/opportunity-log.md". Needs 12. Edits `dist/control-ui`. |
-| 15 | webfetch-jina-fallback | OPTIONAL, does nothing unless `JINA_FALLBACK=on`: when a site refuses `web_fetch` (bot check, 403, a JavaScript-only page), retry once through the Jina Reader (`r.jina.ai`), with `JINA_API_KEY` if set. Privacy: Jina then sees that page address and your IP (docs/SECURITY.md). Edits 4 `dist/*.js` bundles. |
-
-Order matters: 02-07 extend the parser that 01 installs.
+| 01 | plugin-catalog-offline | OpenClaw downloads its plugin catalog from clawhub.ai on **every** gateway start (measured with `services/net_watch.py`), and has no setting for it. This keeps the catalog offline: it answers from the copy shipped in the release. Installing a plugin by name still works. |
+| 02 | webfetch-jina-fallback | OPTIONAL, does nothing unless `JINA_FALLBACK=on`: when a site refuses `web_fetch` (bot check, 403, a JavaScript-only page), retry once through the Jina Reader (`r.jina.ai`), with `JINA_API_KEY` if set. Privacy: Jina then sees that page address and your IP (docs/SECURITY.md). |
 
 ```bash
-patches/openclaw-2026.3.11/apply.sh            # apply missing patches, then print the marker table
-patches/openclaw-2026.3.11/apply.sh --check    # just the table; exit 1 if anything is missing
+patches/openclaw-2026.10.9/apply.sh            # apply missing patches, then print the marker table
+patches/openclaw-2026.10.9/apply.sh --check    # just the table; exit 1 if anything is missing
 bin/gateway-up.sh                              # the gateway must restart to load patched code
 ```
+
+## What happened to the 15 patches for OpenClaw 2026.3.11
+
+Moving to 2026.10.9 (November 2026), each old patch was checked against the new release. Most problems are fixed in
+OpenClaw itself or now have a setting:
+
+| Old patch | Now |
+|---|---|
+| 01-07 text-shaped tool calls (the model writing a call as text instead of making it) | Not needed with Nemotron 3.5 Bolt: in 20 test runs of 7 tasks (search, reading a long page, writing and editing files, memory, reasoning) every call was a real call, none written as text. |
+| 08 wrong argument names, invented paths | Not seen in the same runs. |
+| 09 tool-heavy conversations never condensed | OpenClaw rewrote condensing. Tested on a 32k window: 4 rounds of condensing, the agent saved notes to memory first, and recalled all 8 facts afterwards. |
+| 10 web pages cut at 50k characters | A setting now: `tools.web.fetch.maxChars` 30000 (`bin/gateway-up.sh`). |
+| 11, 12, 14 dashboard showed raw tool output | The new dashboard folds a finished turn's tool activity under "Worked for …" and shows a working indicator while it runs. |
+| 13 sandboxed file writes came out empty | Fixed in OpenClaw: a file written, edited and read back in the Protected sandbox kept its content. |
+| 15 Jina fallback | Ported as 02 above. |

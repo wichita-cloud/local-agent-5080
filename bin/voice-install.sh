@@ -90,7 +90,7 @@ if [ -f "$VOICE_VENV/.stt-installed" ]; then
 fi
 "$REPO/bin/gateway-up.sh" >/dev/null 2>&1
 # read it back: a rejected config value leaves the old setting in place without failing gateway-up
-got=$(openclaw config get messages.tts.openai.baseUrl 2>/dev/null | tr -d '"[:space:]')
-[ "$got" = "http://127.0.0.1:$VOICE_PORT/v1" ] && [ "$(openclaw config get messages.tts.auto 2>/dev/null | tr -d '"[:space:]')" = "$VOICE_REPLIES" ]   && ok "OpenClaw's spoken replies use the local voice server (when: $VOICE_REPLIES)"   || warn "OpenClaw's voice setting didn't stick; run bin/gateway-up.sh and read its warnings"
+got=$(openclaw config get tts.providers.openai.baseUrl 2>/dev/null | tr -d '"[:space:]')
+[ "$got" = "http://127.0.0.1:$VOICE_PORT/v1" ] && [ "$(openclaw config get tts.auto 2>/dev/null | tr -d '"[:space:]')" = "$VOICE_REPLIES" ]   && ok "OpenClaw's spoken replies use the local voice server (when: $VOICE_REPLIES)"   || warn "OpenClaw's voice setting didn't stick; run bin/gateway-up.sh and read its warnings"
 echo
 echo "Done. Console → Voice: add your own voice, or press the microphone and talk to the agent. From a shell: bin/voice.sh say \"Hello there\""

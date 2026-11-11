@@ -3,6 +3,77 @@
 What changed, and why. Every fix here was found by running the stack, not by reading code alone; the "found" notes say
 how. Newest first. Dates are UTC.
 
+## 2026-11-09
+
+### Tested as a fresh install, on the model most PCs get too
+The whole thing was installed from scratch the way the Windows installer does it (a new Ubuntu 22.04 from Ubuntu's own image,
+Docker Desktop connected, `bin/install.sh` unattended, Protected profile): install 3 minutes, first start 4 minutes, `verify.sh`
+27 passed and 0 failed, `privacy-check.sh --live` 19 passed and 0 failed. Then the same 7 agent tasks as before (search, a
+long page, writing and editing files, memory, reasoning): **7 of 7 with Nemotron 3.5 Bolt and 7 of 7 with Qwen3.5 27B**, every
+tool call a real call. The old text-shaped-tool-call patches were written for Qwen; this confirms Qwen doesn't need them on
+OpenClaw 2026.10.9 either.
+- **Outbound guard, found with the real model and fixed:** the guard stopped a page address carrying `?patient=...&dob=...`, and
+  the model then **retried the same address as a web search**, which the guard passed as clean. An address inside a search or a
+  command is now read the way a fetched one is (self-test: 55 cases, 0 wrong stops on a set of ordinary searches with addresses).
+  Also measured: with the guard switched off, five search attempts were each blocked and nothing left the PC; a search carrying an
+  email address was stopped. A chat started from the command line can't be asked, so a stop there counts as no (TROUBLESHOOTING.md).
+- **Found:** installing both search plugins left the unused one switched on in OpenClaw's settings, and the gateway log said it had
+  added it to its allowlist by itself. `bin/gateway-up.sh` now switches off whichever provider isn't the chosen one.
+- **Found in `bin/privacy-check.sh`:** a line-ending slip had turned the character it strips from Windows' output into a newline,
+  so the probe from your network address ran against an empty address list and the Windows listeners were printed run together.
+  Fixed, and it no longer reports the outbound guard as a plugin "beyond this stack's own". Idle Docker traffic is described as what
+  it can be (Docker Desktop's own checks, or a connection the search container kept open after a search), not as Docker Desktop's.
+- **Two copies of this stack on one PC** (a second Ubuntu) share Docker Desktop: `bin/searxng.sh` now says so when a same-named
+  search container is running on another port, instead of "already running" and then a failed test search. The model container
+  has the same name in both copies and the second `bin/up.sh` replaces the first's (it comes back on that copy's next start);
+  the ports themselves are moved by `bin/preflight.sh` as before.
+
+## 2026-11-06
+
+### Outbound guard: everything checked before it leaves
+- **New: `services/outbound_guard.py` and `plugins/outbound-guard`.** Searches and page addresses are read before they leave,
+  for the identifiers on HIPAA's Safe Harbor list, your own health details, and whatever you list in
+  `config/private-terms.txt`. A match pauses the chat and shows you the exact text to allow or deny; no answer means no.
+  Scheduled research doesn't send what it would stop for. If the guard is down the web tools are blocked. It checks what
+  is said, never the topic. Modelled on that list: it does not make the stack "HIPAA compliant" (docs/SECURITY.md).
+- **Found while testing:** the first version missed 8 of 25 leaks in a test set it hadn't seen, such as "my ssn is 123456789"
+  and a name and a condition in two parts of one web address. After the fixes, on another new set: 23 of 25 caught, 0 of 46
+  ordinary searches stopped. Needs OpenClaw 2026.10.9's approvals.
+
+## 2026-11-01
+
+### OpenClaw 2026.10.9 (was 2026.3.11)
+Seven months of OpenClaw releases, including its security fixes. The dashboard now reconnects by itself after a dropped
+connection (a sleeping browser tab, say) instead of showing "event gap detected … refresh recommended". Needs Node 24, which `bin/install.sh` installs. Tested on the machine
+this was built on with Nemotron 3.5 Bolt, through a second OpenClaw beside the running one.
+- **13 of the 15 old patches are no longer needed**, each checked (`patches/README.md` lists what happened to every one):
+  tool calls arrived as real calls in 20 of 20 test runs (search, reading a long page, writing and editing files, memory,
+  reasoning); sandboxed file writes keep their content; condensing works (on a 32k window: 4 rounds, notes saved to memory
+  first, all 8 test facts recalled afterwards); the web-page size limit is a setting; the new dashboard folds tool activity
+  under "Worked for …" by itself. The optional Jina fallback is ported (re-tested: a site answering 403 came back through Jina).
+- **Privacy: new outgoing connections found and closed.** A packet capture of the new gateway starting showed a download
+  from clawhub.ai (its plugin catalog) on every start, with no setting to stop it: new patch 01 keeps that catalog offline.
+  It also downloads a model and price list from catalog.openclaw.ai at start and every six hours: switched off
+  (`models.catalogRefresh`). Captured again: no connection. `bin/privacy-check.sh` checks both.
+- **Only the plugins this setup uses may load** (`plugins.allow`). OpenClaw now turns on about 40 by default, including
+  online speech services, cloud model providers, computer control and file transfer to paired devices.
+- **Turned off: Code Mode and Tool Search**, new defaults that hide the agent's tools behind a code runner or a search.
+  With them on, a question about Python's latest release ran 3.5 minutes of tool calls without an answer.
+- **Turned off: "dreaming"**, a new daily 3 am job that rewrites the agent's `MEMORY.md`. This setup has its own memory.
+- **Web search uses OpenClaw's official SearXNG plugin** (Brave's for a Brave key), pinned to the same release.
+  `services/search_shim.py` now answers that plugin, keeping the recent-results narrowing, the hourly cap and the search
+  count the privacy check reads.
+- **Spoken replies** moved to OpenClaw's new `tts` settings, still pointed only at the local voice server.
+- **Condensing:** OpenClaw now caps its own reserve at a quarter of the window, which fixed what our reserve setting was
+  for (a 32k conversation condensed nearly every turn); the setting is gone. The context warning in `rag_proxy.py`
+  follows the new rule.
+- **Chats are stored in SQLite** now. The nightly backup copies those databases with SQLite's own backup (a copy taken
+  mid-write could be damaged; checked with an integrity check); scheduled research reads "when did you last chat" from them.
+- **Found:** our config's `OPENCLAW_VERSION=2026.3.11` made the new OpenClaw think it WAS 2026.3.11 (it reads that name),
+  so plugins refused to load. The pinned release is now `OPENCLAW_RELEASE` in `bin/lib.sh`, and the old name is cleared.
+- The sandbox attack checks were repeated on the new version (docs/SECURITY.md): still no host files, Docker socket,
+  internet, DNS, sudo or capabilities, with the process and memory limits in place.
+
 ## 2026-10-30
 
 ### Privacy: your data stays on this PC, and you can check it yourself

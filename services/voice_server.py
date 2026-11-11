@@ -5,7 +5,7 @@ Optional. Installed by bin/voice-install.sh into its own venv ($VOICE_VENV), bec
 torch/transformers versions that would fight the memory service's. Started by bin/services-up.sh when that venv exists.
 
 Speaks an OpenAI-compatible API, so OpenClaw can use it as its TTS provider with no key (gateway-up.sh points
-messages.tts.openai.baseUrl here) and the console's Voice tab can preview voices and read replies aloud.
+tts.providers.openai.baseUrl here) and the console's Voice tab can preview voices and read replies aloud.
 
   GET  /health                 {"status": "ok"|"loading"|"error", "engine", "voices": [...]}
   GET  /v1/voices              voice names: "default" (built in) + one per folder in $VOICE_DIR with a ref.wav

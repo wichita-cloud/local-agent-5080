@@ -45,7 +45,10 @@ settings are refused. Inside the sandbox a shared folder appears as `/shared/<fo
 
 ### What was tested (Protected profile)
 A stand-in model that does whatever it's told was driven through the real OpenClaw (2026.3.11) and Docker, so the sandbox is
-tested on its own, as if a prompt injection had fully taken over the model. Each attack was run as the agent's shell tool:
+tested on its own, as if a prompt injection had fully taken over the model. Each attack was run as the agent's shell tool.
+Re-checked on OpenClaw 2026.10.9 (November 2026) through the agent's own shell tool: no home folder or Windows drive, no
+Docker socket, read-only system files, no internet and no DNS, no route to the gateway, no sudo, no Linux capabilities,
+`no-new-privileges` set, 256-process and 4 GB memory limits in place.
 
 | Attack | Result inside the sandbox |
 |---|---|
@@ -68,10 +71,22 @@ private-network and cloud-metadata addresses (also tested). Wrapping helps the m
 sandbox is what limits the damage if it doesn't.
 
 ### Keeping up with OpenClaw
-This release pins **OpenClaw 2026.3.11**, because its tool-call patches are written against exactly that version. OpenClaw has published many
-security advisories since (most concern chat-channel permissions, exec-approval lists and browser/cloud features this setup doesn't use by
-default, but some are relevant to anyone using those). Upgrading means re-testing the patches against a newer version; it is planned,
-not done. Until then: keep the gateway on loopback, don't connect chat channels you don't need, and keep the Protected profile on.
+This release pins **OpenClaw 2026.10.9** (`OPENCLAW_RELEASE` in `bin/lib.sh`), the current release when it was tested, with
+the security fixes OpenClaw published since the previously pinned 2026.3.11. A pinned version is what was tested: the
+settings below and the two patches in `patches/` are checked against exactly that release. Newer OpenClaw releases keep
+coming; moving to one means running the same checks again. Meanwhile: keep the gateway on loopback, don't connect chat
+channels you don't need, and keep the Protected profile on.
+
+What the newer OpenClaw turns on by default, and what this setup does about it (`bin/gateway-up.sh`):
+- **About 40 bundled plugins** (cloud model providers, online speech services, computer control, file transfer to paired
+  devices). Only the ones this setup uses may load: OpenClaw's memory tools, its web-page reader, the search plugin, and
+  for voice the OpenAI-compatible speech provider pointed at the local voice server.
+- **Downloads at every start:** a model and price list from catalog.openclaw.ai (switched off with
+  `models.catalogRefresh.enabled false`) and a plugin catalog from clawhub.ai (no setting exists; `patches/` keeps it offline).
+  Both were seen in a packet capture of the gateway starting, and neither appears after the change.
+- **"Dreaming":** a daily 3 am job that rewrites the agent's `MEMORY.md`. Off: the agent's notes change only when it works.
+- **Code Mode and Tool Search,** which hide the agent's tools behind a code runner or a search. Off: a local model looped
+  with them instead of answering.
 
 Things worth knowing:
 - **Unattended installs** (no terminal to ask on) pick Protected; run `LOCAL_AGENT_SECURITY=standard bin/install.sh` to pick Standard instead.
@@ -84,8 +99,6 @@ Things worth knowing:
 - **The sandbox image** (`docker/sandbox.Dockerfile`, about 330 MB) has bash, curl, git, jq, python3 and ripgrep, no compilers.
   `bin/security.sh set protected` builds it the first time.
 - **OpenClaw's own check:** `bin/security.sh audit` (or the Security tab's button) runs `openclaw security audit`.
-- Patch 04 turns a reply that consists **entirely** of ```` ```bash ```` blocks into a real command execution; in Protected
-  that command runs in the sandbox like any other.
 
 ## Making it safer still
 - Keep the profile on Protected and share the fewest folders, read-only where you can.
@@ -116,8 +129,8 @@ tells someone your IP address:
 
 Nothing else reports home: usage statistics are switched off for every component that has them (`bin/lib.sh` sets
 `DO_NOT_TRACK`, `HF_HUB_DISABLE_TELEMETRY`, ChromaDB's `anonymized_telemetry=False`), the memory models stay offline
-after their first download, OpenClaw's update check and diagnostics export are off, and it doesn't announce itself on
-your local network (its mDNS advertisement is switched off).
+after their first download, OpenClaw's update check, model-catalog and plugin-catalog downloads, feature statistics and
+diagnostics export are off, and it doesn't announce itself on your local network (its mDNS advertisement is switched off).
 
 **Want the agent never to go online?** `bin/security.sh web off` turns off web search, reading web pages and
 scheduled research's searches (`web on` brings them back). Everything else works as before: chat, memory, files, voice.
@@ -129,6 +142,43 @@ Measured 2026-10-26: of 8 home pages that refused a direct fetch (401/403), Jina
 Home Depot, Best Buy, the New York Times) and a CAPTCHA for the other 4. Without a key it is also less dependable for
 popular sites: Jina blocked anonymous requests for nytimes.com for a few hours because of other people's traffic, minutes
 after the same page had worked.
+
+### The outbound guard: what is checked before it leaves
+Before a search or a page address leaves the PC, `services/outbound_guard.py` reads it. The agent's own web tools are held
+by a plugin (`plugins/outbound-guard`), and scheduled research calls the same check. It looks for:
+
+- the identifiers on HIPAA's Safe Harbor list (45 CFR 164.514(b)(2)): names next to a relationship or a health word, street
+  addresses and ZIP codes, personal dates, ages over 89, phone numbers, email addresses, Social Security, medical record,
+  health plan, account, card, licence, vehicle and device numbers, IP addresses and other personal codes;
+- your own health details ("my chemo", "I have diabetes"), but not health as a topic ("symptoms of diabetes");
+- anything you list in `config/private-terms.txt`: copy `config/private-terms.example.txt`, one word or phrase per line.
+  This is how you mark what you consider private. A place you search about is the usual example: nothing can guess it;
+- data tucked into a web address: a very long value, or an identifier inside base64 or hex.
+
+It checks what a request says, never its topic, and it never blocks a subject. When it finds something the chat pauses and
+you see the exact text: **allow it once or deny it**. No answer in two minutes counts as no. Scheduled research has nobody
+to ask, so what it would stop for is not sent. If the guard isn't running, the web tools are blocked, not waved through.
+`OUTBOUND_ASK_ALL=on` asks before every search and page; `OUTBOUND_GUARD=off` turns the checks off.
+`$STATE_DIR/outbound.log` lists what left: time, tool, website, what was found. Never the words.
+
+**This is modelled on HIPAA's list. It does not make the stack "HIPAA compliant"**: that is a legal status of an organisation,
+not a feature of a program, so don't use this for patient records. And it is a safety net, not a guarantee:
+
+| Measured 2026-11-06, with test data | Result |
+|---|---|
+| Ordinary searches and addresses it had never seen | 0 of 46 stopped by mistake |
+| Personal details it had never seen | 23 of 25 caught |
+| Real OpenClaw, a stand-in search engine recording what arrived | allowed: arrived; denied, unanswered, guard stopped, or a run with nobody to ask: nothing arrived |
+| Fresh install, the real model (Nemotron 3.5 Bolt), 2026-11-09 | a search with an email address: stopped. The guard switched off: five search attempts, each blocked, nothing left. A page address carrying `?patient=...&dob=...`: the fetch was stopped, but the model then **retried the same address as a web search**, which went out as clean. Fixed: an address inside a search or a command is now read like a fetched one (55 self-test cases) |
+
+Its limits:
+- It matches patterns. A stranger's name next to a word it doesn't know gets through ("Mary Johnson oncology appointment"
+  did), and so does a detail worded in a way it hasn't seen. Put the names that matter in your private list.
+- It reads text, so biometrics and photos aren't covered.
+- A command the agent runs is only read for what it says. In the Standard profile a command could read a file and send it
+  without the file's contents appearing in the command. Use Protected, where commands have no internet.
+- Messages you exchange with the agent over Telegram are not checked: they are the conversation itself.
+- Text it stops never left the PC, but stays in your chat history and OpenClaw's own log, on this PC, like the rest of the chat.
 
 ### Check it yourself
 You don't have to take this page's word for it. Three ways, from simplest to most thorough:
@@ -159,6 +209,7 @@ Measured 2026-10-30 on the machine this was built on, with these results:
 | All outgoing traffic from WSL blocked, the services restarted, then a memory question | answered correctly from memory; 0 failed memory lookups |
 | Every port of the stack, contacted through the PC's network address | nothing answered (a test server listening on all addresses was found, so the test does catch an exposure) |
 | Before switching off OpenClaw's mDNS | it announced the gateway by multicast DNS when it started (inside WSL's virtual network). Now off |
+| OpenClaw 2026.10.9 starting, watched from WSL (November 2026) | out of the box it connected to clawhub.ai on every start (its plugin catalog). With `models.catalogRefresh` off and patch 01 in place: no connection, no name looked up |
 
 ### Being more anonymous: what works now, and options for later
 - **Now, simplest: a VPN on Windows.** WSL's traffic leaves through Windows, so a VPN app hides your home IP address from
@@ -167,9 +218,9 @@ Measured 2026-10-30 on the machine this was built on, with these results:
 - **Later: search through Tor.** SearXNG can send every engine's request through Tor (`outgoing: using_tor_proxy: true`,
   with a Tor SOCKS proxy such as a `tor` container on 127.0.0.1:9050, and `extra_proxy_timeout`). Expect slower searches
   and fewer results: many engines answer Tor with a CAPTCHA or nothing. Not built in yet.
-- **Later: fetch pages through Tor or a proxy too.** OpenClaw can send `web_fetch` through an HTTP proxy from the
-  environment; it takes two small patches (forcing the environment proxy and skipping a DNS
-  pre-check that fails behind a proxy). Pointing that at a local Tor proxy would hide your IP from websites. Not built in.
+- **Later: fetch pages through Tor or a proxy too.** OpenClaw 2026.10.9 can send `web_fetch` through an HTTP proxy from
+  the environment (`tools.web.fetch.useTrustedEnvProxy`). Pointing that at a local Tor proxy would hide your IP from
+  websites. Not built in.
 - **Later: no third party for blocked pages.** Jina's Reader is open source (Apache-2.0) and can run locally in Docker,
   as can alternatives such as Crawl4AI. A local reader renders JavaScript pages without telling anyone else what you
   read; it does not get past sites that block your IP, which is the case where only Jina (or a VPN) helps.

@@ -5,7 +5,7 @@ Start with `bin/verify.sh` and fix the **lowest** failing layer first.
 ## Speed
 | Symptom | First check | Fix |
 |---|---|---|
-| The agent says it saved a file, but the file is empty (0 bytes); `bin/verify.sh` layer 5 counts empty files | `patches/openclaw-2026.3.11/apply.sh --check`: is `LOCAL_AGENT_SANDBOX_WRITE_STDIN_V1` there? | Protected profile on an unpatched OpenClaw loses every sandboxed write. Re-apply the patches (`sudo -E patches/openclaw-2026.3.11/apply.sh`), `bin/gateway-up.sh`, then ask the agent to write the files again (its chat history still has their text) |
+| The agent says it saved a file, but the file is empty (0 bytes); `bin/verify.sh` layer 5 counts empty files | `tail ~/.local/state/local-agent/gateway.log` around that time | ask the agent to write the file again (its chat history still has the text). On OpenClaw 2026.3.11 this was a sandbox bug (old patch 13), fixed in 2026.10.9 |
 | Game Mode says the graphics card was NOT freed | `windows\gpu-check.ps1` lists the programs on the 5080 | close them (often a browser, or the desktop drawn by the 5080), or **restart Windows**: the agent loads nothing onto the card after a restart until you send a message |
 | First message after a restart takes a minute or two | `tail ~/.local/state/local-agent/model-start.log` | normal: the model loads with the first message. If the reply says the graphics card is busy, close the game or program using it and send again |
 | Replies slow, everything green | `bin/bench.sh` → decode ≫ 21 ms/token? then `windows\gpu-check.ps1` | Spill. Free VRAM (display off the 5080, close or pin apps), then `bin/llama-up.sh`. STABILITY.md |
@@ -24,7 +24,7 @@ Start with `bin/verify.sh` and fix the **lowest** failing layer first.
 | Turn fails right after a model restart with "still loading" | `cat ~/.local/state/local-agent/ready-proxy.log` for "gate timeout" | model took >240 s to load; wait and retry, or raise READY_TIMEOUT in `config/stack.env` |
 | Agent says it "couldn't check its memory" | `grep FAILED ~/.local/state/local-agent/rag-proxy.log`; `bin/verify.sh` counts them | the lookup timed out twice. Usually right after a model load or with every CPU core busy; repeated failures mean the memory service is stuck (the watchdog restarts it) |
 | Agent says it has no information about something recent, or offers to search instead of searching | `openclaw config get tools.web.search.enabled`; `curl -s localhost:18890/health` | `false` or no answer: search isn't running (`bin/searxng.sh up`), then start a new chat (`/new`). If search is on, check that `SEARCH_NUDGE` isn't `0` |
-| Dashboard chat shows raw JSON from searches and web pages | the brain icon in the chat toolbar ("Toggle assistant thinking/working output") | click it to turn working output off; the browser remembers the choice per address |
+| Dashboard chat shows a lot of tool activity | finished turns fold it under **Worked for …** above the answer | click that line to open or close it; the chat view menu's **Keep commentary** controls what stays visible |
 | `CUDA error: device not ready` / RemoteDisconnected on long prompts | context or ubatch too big for the VRAM left | lower CTX, keep UBATCH 128 (STABILITY.md) |
 | Container crash-loops with "failed to fit params to free device memory" | relaunched before the previous CUDA context freed | `bin/llama-up.sh` (it waits); don't `docker restart` in a loop |
 | Model serves garbage | the GGUF is truncated | re-download; compare size to MIN_BYTES |
@@ -32,12 +32,14 @@ Start with `bin/verify.sh` and fix the **lowest** failing layer first.
 ## Tools
 | Symptom | First check | Fix |
 |---|---|---|
-| Tool call appears as text in the chat, nothing runs | `patches/openclaw-2026.3.11/apply.sh --check` | re-apply, then `bin/gateway-up.sh` (reinstalling OpenClaw removes patches) |
-| `EACCES … mkdir '/memory'` or `/workspace` | model invented an absolute path | patch 08 remaps these; check it's applied |
+| Tool call appears as text in the chat, nothing runs | which model? `grep ACTIVE_MODEL config/stack.env` | not seen with Nemotron 3.5 Bolt on OpenClaw 2026.10.9. Start a new chat (`/new`); if it repeats, tell us which model and what you asked |
+| `EACCES … mkdir '/memory'` or `/workspace` | model invented an absolute path | ask again with a path inside its workspace (`notes/…`, `projects/…`) |
 | (overnight job) "no web search is set up" | docs/OVERNIGHT.md | set up SearXNG (`bin/searxng.sh up`, no account) or paste a Tavily key; the agent's own `web_search` then uses SearXNG too |
 | the agent says it can't search the web, or "missing_brave_api_key" | `config/secrets.env` BRAVE_API_KEY | get a key (docs/OVERNIGHT.md, "Getting a Brave Search API key"), set it, then `bin/gateway-up.sh` (or paste it in the Research tab) |
 | web_search HTTP 402 | Brave plan quota used up | not a bug; check your Brave dashboard |
-| Research fills the context after 2-3 fetches | patch 10 present? | apply it |
+| a web tool answers "Plugin approval unavailable: non-interactive CLI runs have no approval-capable initiating surface" | `tail ~/.local/state/local-agent/outbound.log` shows `ask` | the outbound guard found something personal in that search or address and wanted to ask you; a chat started from the command line (`openclaw agent`) or a scheduled job has nobody to ask, so it counts as no. In the dashboard the question appears and you choose (docs/SECURITY.md) |
+| a web tool answers "The privacy check isn't answering, so nothing was sent" | `curl localhost:18892/health` | the outbound guard is down and the web tools fail closed: `bin/services-up.sh` |
+| Research fills the context after 2-3 fetches | `openclaw config get tools.web.fetch.maxChars` = 30000? | `bin/gateway-up.sh` sets it |
 | Agent never sees a long instruction file's tail | `bootstrapMaxChars` < file size | raise BOOTSTRAP_MAX_CHARS, `bin/gateway-up.sh` |
 
 ## Agent / dashboard

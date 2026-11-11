@@ -27,7 +27,7 @@ setkey() { sed -i "/^$1=/d" "$CFG"; printf '%s="%s"\n' "$1" "$2" >> "$CFG"; }
 moved=""
 used=" "
 taken() { port_listening "$1" && return 0; case "$used" in *" $1 "*) return 0;; esac; return 1; }
-for k in LLAMA_PORT SHIM_PORT RAG_PORT MEMORY_PORT GATEWAY_PORT CONSOLE_PORT VOICE_PORT STT_PORT SEARXNG_PORT SEARCH_SHIM_PORT; do
+for k in LLAMA_PORT SHIM_PORT RAG_PORT MEMORY_PORT GATEWAY_PORT CONSOLE_PORT VOICE_PORT STT_PORT SEARXNG_PORT SEARCH_SHIM_PORT OUTBOUND_GUARD_PORT; do
   p="${!k:-}"; [ -n "$p" ] || continue
   if taken "$p"; then
     n=$p
@@ -56,7 +56,7 @@ if [ -n "$found" ]; then
   printf '%b\n' "$found"
   cat <<TXT
 
-  This release pins OpenClaw $OPENCLAW_VERSION${have:+ (you have $have)} and changes its settings (model, ports, sandbox, tools).
+  This release pins OpenClaw $OPENCLAW_RELEASE${have:+ (you have $have)} and changes its settings (model, ports, sandbox, tools).
   Going ahead here would replace your version and rewrite your configuration.
 
   The clean way: install this stack in a SECOND Ubuntu, which gets its own OpenClaw and settings and leaves yours alone

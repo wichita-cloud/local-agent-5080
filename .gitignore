@@ -1,6 +1,7 @@
 # local config and secrets: never commit
 config/stack.env
 config/secrets.env
+config/private-terms.txt
 config/tuning/
 *.key
 *.pem
