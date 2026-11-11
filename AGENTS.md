@@ -29,6 +29,7 @@ Everything is bash and small Python programs. There is no build step, and every 
 | `bin/services-up.sh` | Start memory service, memory proxy and readiness gate (idempotent, one instance each). |
 | `bin/gateway-up.sh` | Write the OpenClaw config from the active profile, then (re)start the gateway and print the URL. |
 | `bin/privacy-check.sh`, `services/net_watch.py` | Checks that data stays on the PC: ports open to this PC only (and nothing answers through the LAN address), privacy settings, where data lives; `--live` packet-captures WSL (net_watch.py, root) and samples Windows' table for Docker's backend while the agent answers from memory. Evidence in `$STATE_DIR/privacy-check/`. Changes nothing. |
+| `plugins/restore-copies/`, `bin/restore.sh` | Before `write`, `edit` or `apply_patch` changes a file, keeps the old version in `$STATE_DIR/restore-copies` (20 per file); `restore.sh list/show/restore` puts one back. Never blocks a tool call (the hook fails closed, so every step is caught). Commands (`rm`, `sed -i`) are not covered. |
 | `services/outbound_guard.py`, `plugins/outbound-guard/`, `config/private-terms.example.txt` | Reads what the agent is about to send online; the plugin holds `web_search`, `web_fetch` and commands naming a web address, and `overnight.py` imports the same check. :18892. Fails closed. docs/SECURITY.md. |
 | `bin/verify.sh` | Layered health report. Fixes nothing. Exit 0 only if every layer passes. |
 | `bin/bench.sh` | Real speed test with a large, uncacheable prompt. Compares the result to the profile's expected numbers. |

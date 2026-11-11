@@ -113,8 +113,8 @@ else
   oc tts '{"auto":"off"}'
 fi
 # Everything the agent sends online is checked first (services/outbound_guard.py). The plugin loads from this repo.
-PLUGINS="$PLUGINS,\"outbound-guard\""
-oc plugins.load.paths "[\"$REPO/plugins/outbound-guard\"]"
+PLUGINS="$PLUGINS,\"outbound-guard\",\"restore-copies\""
+oc plugins.load.paths "[\"$REPO/plugins/outbound-guard\",\"$REPO/plugins/restore-copies\"]"
 oc plugins.entries.outbound-guard '{"enabled":true}'
 oc plugins.allow "[$PLUGINS]"
 
@@ -168,6 +168,21 @@ PY
 else
   oc agents.defaults.sandbox '{"mode":"off"}'
 fi
+# Restore copies (plugins/restore-copies, bin/restore.sh): before the agent rewrites a file with write / edit / apply_patch,
+# the old version is kept in $STATE_DIR/restore-copies. In the sandbox the agent sees /workspace and /shared/<name>; the
+# plugin is told which folder on this PC each one is, taken from the same sandbox settings written above.
+RC=$(SBX="${SBX:-}" python3 - <<'PY'
+import json, os
+sbx = json.loads(os.environ["SBX"]) if os.environ.get("SBX") else {}
+mounts = []
+for b in (sbx.get("docker") or {}).get("binds", []):
+    host, container = b.split(":")[:2]
+    mounts.append({"container": container, "host": host.rstrip("/"), "label": "shared-" + os.path.basename(container)})
+print(json.dumps({"enabled": True, "config": {"store": os.path.join(os.environ["STATE_DIR"], "restore-copies"),
+                  "workspace": os.environ["OPENCLAW_WORKSPACE"].rstrip("/"), "sandboxed": bool(sbx), "mounts": mounts}}))
+PY
+)
+oc plugins.entries.restore-copies "$RC"
 # Tell the agent where its shared folders are (it can't see the host's paths from inside the sandbox)
 if [ "${SECURITY_PROFILE:-standard}" = protected ] && [ -n "${SHARED_FOLDERS:-}" ]; then
   python3 - "$OPENCLAW_WORKSPACE/shared-folders.md" <<'PYX'

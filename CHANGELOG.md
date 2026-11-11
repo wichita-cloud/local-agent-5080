@@ -3,6 +3,23 @@
 What changed, and why. Every fix here was found by running the stack, not by reading code alone; the "found" notes say
 how. Newest first. Dates are UTC.
 
+## 2026-11-11
+
+### Four ideas from the Atomic agent
+- **A stuck agent stops by itself.** OpenClaw's own tool-loop detection is now on (`tools.loopDetection`, off by default;
+  OpenClaw recommends it for smaller models). A turn that repeats the same tool calls without progress ends instead of
+  running until the conversation fills. (bin/gateway-up.sh)
+- **Per-turn traces.** The memory proxy writes one line per model request to `$STATE_DIR/traces/<date>.ndjson` (14 days):
+  sizes, which tools were called (names only), and llama's own timings, including how much of the prompt came from its
+  cache. Never message text or tool arguments. `TRACE=0` turns it off. (services/rag_proxy.py)
+- **Prompt-cache check.** `verify.sh` reads those traces and warns when agent requests stop reusing llama's prompt cache,
+  the silent reason a reply can start many seconds late. Tested on made-up traces (good, bad, too few, missing).
+- **Undo for the agent's file edits.** Before `write`, `edit` or `apply_patch` changes a file, the old version is kept
+  (`plugins/restore-copies`, 20 per file, outside the workspace); `bin/restore.sh list | show <file> | restore <file> [N]`
+  puts one back and saves the current file first. Found while testing: two restores in the same second overwrote each
+  other's safety copy, and a manifest category OpenClaw doesn't know ("safety") stopped the plugin loading at all; both
+  fixed and retested (OpenClaw 2026.10.9 reports the plugin enabled and the config valid).
+
 ## 2026-11-09
 
 ### Tested as a fresh install, on the model most PCs get too

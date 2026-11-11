@@ -1,0 +1,25 @@
+{
+  "id": "restore-copies",
+  "name": "Restore copies",
+  "description": "Keeps the previous version of files the agent changes with write, edit or apply_patch (bin/restore.sh).",
+  "categories": ["security"],
+  "activation": { "onStartup": true },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "store": { "type": "string" },
+      "workspace": { "type": "string" },
+      "sandboxed": { "type": "boolean" },
+      "mounts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "container": { "type": "string" }, "host": { "type": "string" }, "label": { "type": "string" } },
+          "required": ["container", "host", "label"]
+        }
+      }
+    }
+  }
+}
