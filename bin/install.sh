@@ -70,15 +70,31 @@ fi
 nvm install "$NODE_MAJOR" >/dev/null && nvm alias default "$NODE_MAJOR" >/dev/null && nvm use "$NODE_MAJOR" >/dev/null || die "Node $NODE_MAJOR install failed"
 have=$(openclaw --version 2>/dev/null | grep -oE '[0-9]{4}\.[0-9]+\.[0-9]+' | head -1)
 if [ "$have" != "$OPENCLAW_RELEASE" ]; then
+  # Upgrading an existing install: OpenClaw only converts settings written before 2026.9.7 from that release, so step
+  # through it. Without this the new release calls the old settings file invalid and no plugin installs.
+  oc_cfg="$HOME/.openclaw/openclaw.json"
+  if [ -n "$have" ] && [ -s "$oc_cfg" ] && [ "$(printf '%s\n%s\n' "$have" "$OPENCLAW_BRIDGE" | sort -V | head -1)" = "$have" ] && [ "$have" != "$OPENCLAW_BRIDGE" ]; then
+    cp -n "$oc_cfg" "$oc_cfg.before-$OPENCLAW_RELEASE"
+    log "    converting OpenClaw $have settings (copy kept: $oc_cfg.before-$OPENCLAW_RELEASE)"
+    npm install -g "openclaw@$OPENCLAW_BRIDGE" >/dev/null 2>&1 || die "npm install openclaw@$OPENCLAW_BRIDGE (needed to convert the old settings) failed"
+    timeout 300 openclaw doctor --fix --non-interactive </dev/null >/dev/null 2>&1 || warn "OpenClaw $OPENCLAW_BRIDGE could not convert the old settings by itself"
+    oc_converted=1
+  fi
   # npm skips OpenClaw's install scripts by default; they only tidy files left by an earlier version.
   npm install -g "openclaw@$OPENCLAW_RELEASE" >/dev/null 2>&1 || die "npm install openclaw@$OPENCLAW_RELEASE failed"
+  if [ "${oc_converted:-0}" = 1 ]; then
+    timeout 300 openclaw doctor --fix --non-interactive </dev/null >/dev/null 2>&1 || true
+    openclaw config validate >/dev/null 2>&1 || warn "OpenClaw still rejects the settings file: run 'openclaw config validate' to see why (your old file is $oc_cfg.before-$OPENCLAW_RELEASE)"
+  fi
 fi
 ok "openclaw $(openclaw --version 2>/dev/null | head -1)"
 # Web search providers are separate official plugins now, pinned to the same release. Installed whether or not they are
 # used: bin/gateway-up.sh only lets the chosen one load (SearXNG through services/search_shim.py, or Brave with a key).
 for plug in searxng brave; do
-  if openclaw plugins list 2>/dev/null | grep -q "@openclaw/$plug-plugin"; then continue; fi
-  openclaw plugins install "@openclaw/$plug-plugin@$OPENCLAW_RELEASE" >/dev/null 2>&1 || warn "could not install the $plug search plugin; web search may not work"
+  if openclaw plugins list 2>&1 | grep -v 'install incomplete' | grep -q "@openclaw/$plug-plugin"; then continue; fi
+  # --force on the second try: an install that was cut short (or refused under old settings) leaves a half-made
+  # plugin folder that a plain install will not replace.
+  openclaw plugins install "@openclaw/$plug-plugin@$OPENCLAW_RELEASE" >/dev/null 2>&1     || openclaw plugins install "@openclaw/$plug-plugin@$OPENCLAW_RELEASE" --force >/dev/null 2>&1     || warn "could not install the $plug search plugin; web search may not work"
 done
 
 log "4/9 Python venv (services)"

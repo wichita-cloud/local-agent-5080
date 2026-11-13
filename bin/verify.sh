@@ -70,7 +70,12 @@ fi
 layer "4 Services"
 for s in "memory-service:$MEMORY_PORT:/health" "rag-proxy:$RAG_PORT:/health"; do
   n=${s%%:*}; rest=${s#*:}; port=${rest%%:*}; path=${rest#*:}
-  if curl -s -m 10 "http://127.0.0.1:$port$path" 2>/dev/null | grep -q '"status" *: *"ok"'; then pass "$n (:$port)"
+  # A healthy answer from a port no process of this Ubuntu holds is ANOTHER WSL distro's service on the same port (all
+  # distros share one network): chats would then pass through that other install's memory, not this one's.
+  if port_listening "$port" && [ -z "$(port_pid "$port")" ]; then
+    fail "$n (:$port) is held by a program outside this Ubuntu (another WSL distro?); this stack's own $n is not running"
+    hint "stop the other program, or free the ports: rm \"$STATE_DIR/install.complete\"; bin/preflight.sh; bin/up.sh"
+  elif curl -s -m 10 "http://127.0.0.1:$port$path" 2>/dev/null | grep -q '"status" *: *"ok"'; then pass "$n (:$port)"
   else fail "$n (:$port) not healthy"; hint "bin/services-up.sh (the watchdog restarts it within ~1 min if cron is running)"; fi
 done
 # A memory lookup that fails doesn't stop the turn (fail open), so without this nobody would know recall was missing.
@@ -130,7 +135,13 @@ else caution "prompt cache mostly not reused: median ${cpct}% over the last $cn 
 
 layer "5 Agent (OpenClaw)"
 code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 "http://127.0.0.1:$GATEWAY_PORT/" 2>/dev/null)
-[ "$code" = 200 ] && pass "gateway :$GATEWAY_PORT HTTP 200" || { fail "gateway :$GATEWAY_PORT HTTP ${code:-none}"; hint "bin/gateway-up.sh"; }
+# All WSL distros share one network: a program in ANOTHER Ubuntu on the same port answers HTTP 200 here too, while this
+# stack's own gateway has failed to start ("address already in use"). So the port must belong to a process of this Ubuntu.
+if [ "$code" = 200 ] && [ -z "$(port_pid "$GATEWAY_PORT")" ]; then
+  fail "gateway :$GATEWAY_PORT is answered by a program outside this Ubuntu (another WSL distro?), not by this stack's gateway"
+  hint "stop the other program, or set GATEWAY_PORT to a free port in config/stack.env, then bin/gateway-up.sh"
+elif [ "$code" = 200 ]; then pass "gateway :$GATEWAY_PORT HTTP 200"
+else fail "gateway :$GATEWAY_PORT HTTP ${code:-none}"; hint "bin/gateway-up.sh"; fi
 cw=$(openclaw config get models.providers.ollama.models 2>/dev/null | grep -oE '"?contextWindow"?: *[0-9]+' | grep -oE '[0-9]+$' | head -1)
 [ "$standby" = 1 ] && srv_ctx=${CTX:-}   # not loaded: compare with the profile it will load
 if [ -n "$cw" ] && [ "$cw" = "${srv_ctx:-x}" ]; then pass "OpenClaw contextWindow $cw = llama -c"

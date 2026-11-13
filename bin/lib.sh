@@ -31,7 +31,8 @@ export VOICE_PORT="${VOICE_PORT:-8880}" VOICE_ENGINE="${VOICE_ENGINE:-nano}" VOI
 # not in config/stack.env, so an older settings file can't pin an older OpenClaw. OPENCLAW_VERSION is cleared because
 # OpenClaw reads that name as its OWN version: an old stack.env setting it made plugins refuse to load ("this host is 2026.3.11").
 OPENCLAW_RELEASE=2026.10.9 NODE_MAJOR=24
-export OPENCLAW_RELEASE NODE_MAJOR; unset OPENCLAW_VERSION
+OPENCLAW_BRIDGE=2026.9.7   # settings older than this are only converted by this release (bin/install.sh steps through it)
+export OPENCLAW_RELEASE OPENCLAW_BRIDGE NODE_MAJOR; unset OPENCLAW_VERSION
 
 # No usage statistics from any component: ChromaDB (memory), Hugging Face libraries, Gradio (pulled in by the voice
 # add-on), and anything honouring the DO_NOT_TRACK convention. This stack only goes online for what you ask it to do.

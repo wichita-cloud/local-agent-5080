@@ -3,6 +3,35 @@
 What changed, and why. Every fix here was found by running the stack, not by reading code alone; the "found" notes say
 how. Newest first. Dates are UTC.
 
+## 2026-11-13
+
+### Upgrading an existing install, tested on a real one
+An install from the 2026.10.30 release (OpenClaw 2026.3.11) was upgraded in place: new code over the old folder with its
+two settings files kept, then `bin/install.sh` and `bin/up.sh`. Result after the fixes below: `verify.sh` 32 passed and
+0 failed. The four Atomic items were then tested with Nemotron 3.5 Bolt on that install.
+- **Found: the upgrade left OpenClaw unable to read its own settings.** OpenClaw 2026.10.9 called the old settings file
+  invalid, so neither search plugin installed, and its repair command said to go through 2026.9.7 first.
+  `bin/install.sh` now steps through that release when the installed one is older, keeps a copy of the old file
+  (`openclaw.json.before-2026.10.9`), and retries a half-installed plugin with `--force`. The steps were run by hand on
+  the test install; the new installer code itself has not yet been run on a second old install.
+- **Found: `verify.sh` passed while another program answered on this stack's ports.** All WSL distros share one network.
+  With a second agent stack running in another Ubuntu on the same ports, this stack's gateway, memory service and memory
+  proxy failed to start ("address already in use"), every health check still got an answer, and chats passed through the
+  other stack's memory proxy. `verify.sh` now fails when the gateway, memory service or memory proxy port is not held
+  by a process of this Ubuntu, and says how to move the ports. Not fixed: `bin/preflight.sh` skips its port check once
+  an install exists, so the ports have to be changed in `config/stack.env` by hand.
+- **Loop detection, measured:** asked to run the same command 30 times, the model sent 29 identical calls in one step;
+  OpenClaw 2026.10.9 logged warnings and blocked from the 20th ("Critical generic loop detected", action=block), and the
+  turn ended with the model saying so. On 2026.3.11 the same setting only logged warnings.
+- **Traces:** one line per request in `$STATE_DIR/traces/<date>.ndjson`; fields are sizes, counts, tool names and timings,
+  no message text (checked on the lines the tests produced).
+- **Prompt-cache check:** on real traces `verify.sh` reported a median of 99% reused over 8 agent requests; with the
+  cached counts set to 0 in the trace file it warned ("median 0%").
+- **Restore copies:** the agent wrote a file, then overwrote it with the `write` tool; `bin/restore.sh list`, `show` and
+  `restore` brought the first version back.
+- **`privacy-check.sh --live`:** 18 passed, 1 failed: a connection from WSL to a Telegram address. This install has no
+  Telegram channel and another distro on the PC was polling Telegram at the time; the check cannot tell distros apart.
+
 ## 2026-11-11
 
 ### Four ideas from the Atomic agent
