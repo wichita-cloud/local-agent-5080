@@ -27,7 +27,7 @@ Behaviour worth knowing:
   * This is a safety net, not a guarantee. It matches patterns, so it can't recognise a stranger's name or a detail worded in
     a way it has never seen, and P and Q (biometrics, face photos) aren't text. docs/SECURITY.md says what it doesn't cover.
 """
-import base64, binascii, json, os, re, sys, threading, time, urllib.parse
+import base64, binascii, json, os, re, sys, threading, urllib.parse
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 

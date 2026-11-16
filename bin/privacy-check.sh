@@ -117,7 +117,6 @@ if [ "$LIVE" = 1 ]; then
   WOUT=$(wslpath -w "$OUT/windows-docker.csv")
   ps1="\$end=(Get-Date).AddSeconds($total); \$seen=@{}; while ((Get-Date) -lt \$end) { \$ids=@{}; Get-Process -Name 'com.docker.backend','com.docker.vpnkit','vpnkit' -ErrorAction SilentlyContinue | ForEach-Object { \$ids[\$_.Id]=\$_.ProcessName }; Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { \$ids.ContainsKey([int]\$_.OwningProcess) -and \$_.RemoteAddress -notmatch '^(127\.|0\.0\.0\.0$|::1?$)' -and \$_.State -ne 'Listen' } | ForEach-Object { \$k=\"\$(\$_.RemoteAddress),\$(\$_.RemotePort)\"; if (-not \$seen.ContainsKey(\$k)) { \$seen[\$k]=(Get-Date -Format 'HH:mm:ss') } }; Start-Sleep -Milliseconds 700 }; 'first_seen,remote,port,reverse_name' | Set-Content '$WOUT'; \$seen.GetEnumerator() | ForEach-Object { \$ip=\$_.Key.Split(',')[0]; \$n=try { [System.Net.Dns]::GetHostEntry(\$ip).HostName } catch { '' }; \"\$(\$_.Value),\$(\$_.Key),\$n\" } | Sort-Object | Add-Content '$WOUT'"
   powershell.exe -NoProfile -EncodedCommand "$(printf '%s' "$ps1" | iconv -t UTF-16LE | base64 -w0)" >/dev/null 2>&1 & WP=$!
-  t0=$(date +%H:%M:%S)
   log "watching ${SECS} s of idle time (leave the agent alone)"; sleep "$SECS"
   t1=$(date +%H:%M:%S)
   log "asking the agent a memory-only question in a throwaway chat"

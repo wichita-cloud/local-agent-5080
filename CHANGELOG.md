@@ -3,6 +3,38 @@
 What changed, and why. Every fix here was found by running the stack, not by reading code alone; the "found" notes say
 how. Newest first. Dates are UTC.
 
+## 2026-11-16
+
+### Checks that were missing
+The automatic checks proved that every file parses; nothing sent a request through the two programs every chat turn
+passes through. Found by running stricter checks over the whole repo (the results are in the notes below).
+- **The chat path is tested end to end, without a GPU.** `services/chatpath_selftest.py` starts the real readiness gate
+  and memory proxy between a stand-in model and memory service and sends requests through them: 24 checks, among them
+  that a streamed reply arrives whole, that a reply whose first token takes 12 s is not cut off, that a memory goes in
+  front of the last user message and no message changes role, that the turn goes ahead (and the model is told) when the
+  memory service is down, that game mode answers with a message, and that traces hold no message text, memory text or
+  tool argument. Confirmed it can fail: with the 10 s socket timeout put back in a copy of the gate it reported the
+  cut-off reply, and with a tool argument written into the trace it reported the leak. Runs in CI on every push.
+- **`verify.sh` reports a RAM prompt cache that is too small.** llama keeps a conversation's state in system RAM
+  (`--cache-ram`) while another request uses the model; a state bigger than the limit is dropped, and only llama's own
+  log says so. Measured 2026-11-15 with Bolt 74B at a 128k window and `--cache-ram 2048`: a 36k-token conversation's state
+  was 2,415 MiB and was dropped; with 4096 the next message read 29 tokens in 1 s instead of 35,869 in 47 s. The check
+  was run against that log (1 drop, 2,414 MiB reported) and against a server with 4096 (none). The shipped profiles are
+  unchanged: their values were measured on their own files, and this check now says when one is too small.
+- **The nvm installer is checked before it runs.** `bin/install.sh` piped it from the network straight into bash; it now
+  downloads it, compares its sha256 with the reviewed v0.40.3 file, and runs nothing on a mismatch. Syntax-checked; not
+  yet run on a fresh Ubuntu.
+- **CI is stricter:** shellcheck at warning level (was errors only), unused and undefined names in every Python file
+  (pyflakes), every PowerShell file must parse (the installer engine and the Windows helpers were checked nowhere), and
+  the GitHub actions are pinned to commits instead of tags. A weekly job lists published vulnerabilities in the Python
+  packages and in the pinned OpenClaw's dependencies; it reports and never blocks a push. The new CI steps have been
+  run by hand on this PC (all pass); the workflow file itself has not run on GitHub yet.
+- **Small fixes those checks found:** three unused imports, two unused variables, one `local x=$(...)` that hid a
+  failed command (`bin/backup.sh`). No behaviour change.
+- **`config/stack.env.example` lists five settings that were read but not documented** (`DECODE_WINDOW`,
+  `DECODE_MIN_SAMPLES`, `LOG_MAX_KB`, `LOG_KEEP_KB`, `MEMORY_ARCHIVE`) and the one-run variables such as
+  `LOCAL_AGENT_UNATTENDED`.
+
 ## 2026-11-13
 
 ### Upgrading an existing install, tested on a real one

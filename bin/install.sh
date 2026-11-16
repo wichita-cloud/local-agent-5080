@@ -64,7 +64,13 @@ log "3/9 Node + OpenClaw $OPENCLAW_RELEASE"
 # and npm would then call the WINDOWS npm ("ENOENT ... AppData\Roaming\npm"). Hide /mnt/c paths while setting up Node.
 PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '^/mnt/' | paste -sd: -); export PATH
 if [ ! -s "$HOME/.nvm/nvm.sh" ]; then
-  curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash >/dev/null || die "nvm install failed"
+  # The nvm installer is run only if it is the exact file that was reviewed (sha256 of v0.40.3's install.sh, 2026-11-16):
+  # a script piped from the network straight into bash runs whatever that address serves on the day.
+  nvm_sh=$(mktemp)
+  curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh -o "$nvm_sh" || die "could not download the nvm installer"
+  echo "2d8359a64a3cb07c02389ad88ceecd43f2fa469c06104f92f98df5b6f315275f  $nvm_sh" | sha256sum -c --status     || { rm -f "$nvm_sh"; die "the nvm installer is not the file this release was tested with (checksum mismatch); nothing was run"; }
+  bash "$nvm_sh" >/dev/null || die "nvm install failed"
+  rm -f "$nvm_sh"
 fi
 . "$HOME/.nvm/nvm.sh"
 nvm install "$NODE_MAJOR" >/dev/null && nvm alias default "$NODE_MAJOR" >/dev/null && nvm use "$NODE_MAJOR" >/dev/null || die "Node $NODE_MAJOR install failed"

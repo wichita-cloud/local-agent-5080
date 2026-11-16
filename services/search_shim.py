@@ -18,7 +18,6 @@ Behaviour worth knowing:
   * A small hourly cap (SEARCH_SHIM_PER_HOUR, default 60) so a looping agent can't hammer the search engines.
 """
 import json, os, re, sys, threading, time, urllib.parse, urllib.request, urllib.error
-from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("SEARCH_SHIM_PORT", "18890"))

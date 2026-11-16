@@ -18,11 +18,11 @@ jobs:
   syntax:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
       - name: bash syntax
         run: for f in bin/*.sh guards/*.sh patches/*/apply.sh; do bash -n "$f" || exit 1; done
-      - name: shellcheck (errors only)
-        run: shellcheck -S error bin/*.sh guards/*.sh patches/*/apply.sh
+      - name: shellcheck (warnings too; SC1090 = sourcing a path built at run time, which is how config is loaded)
+        run: shellcheck -S warning -e SC1090 bin/*.sh guards/*.sh patches/*/apply.sh
       - name: python compiles
         run: python3 -m py_compile services/*.py console/server.py bin/mtp-graft.py patches/openclaw-*/*.py
       - name: overnight job logic (time window, private-address guard, JSON recovery)
@@ -31,6 +31,22 @@ jobs:
         run: python3 services/search_shim.py selftest
       - name: outbound guard (finds identifiers, leaves ordinary searches alone)
         run: python3 services/outbound_guard.py selftest
+      - name: unused or undefined names in every Python file (pyflakes)
+        run: |
+          python3 -m venv /tmp/lint && /tmp/lint/bin/pip install -q pyflakes requests
+          git ls-files '*.py' | xargs /tmp/lint/bin/python -m pyflakes
+      - name: chat path end to end (the real gate and memory proxy between a stand-in model and memory service)
+        run: /tmp/lint/bin/python services/chatpath_selftest.py
+      - name: PowerShell files parse (installer engine, Windows helpers)
+        shell: pwsh
+        run: |
+          $bad = 0
+          Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
+            $e = $null; $t = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$t, [ref]$e)
+            if ($e.Count) { $bad++; Write-Host "FAIL $($_.FullName): $($e[0].Message)" } else { Write-Host "ok   $($_.Name)" }
+          }
+          exit $bad
 
   memory-service-packages:
     # bin/install.sh step 4, on the Ubuntu this was built on (22.04) and the next one (24.04, Python 3.12)
@@ -40,7 +56,7 @@ jobs:
         os: [ubuntu-22.04, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
       - name: venv + CPU torch + services/requirements.txt (as install.sh does)
         run: |
           python3 -m venv /tmp/venv
@@ -58,15 +74,15 @@ jobs:
         os: [ubuntu-22.04, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
       - run: bin/voice-install.sh --deps-only
 
   openclaw-patches:
     # the pinned OpenClaw still installs from npm, and every patch still applies with the expected marker counts
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4
         with:
           node-version: 24
       - name: install the pinned openclaw (bin/lib.sh) into a scratch prefix
@@ -86,7 +102,7 @@ jobs:
     # every URL a profile downloads from still serves a file of the expected size; every pinned image still exists
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
       - name: model, projector and MTP-donor links
         run: |
           rc=0
@@ -121,7 +137,7 @@ jobs:
     # normal user. bin/security.sh builds the same Dockerfile on a user's PC.
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
       - name: build the sandbox image
         run: docker build -t local-agent-sandbox:1 -f docker/sandbox.Dockerfile docker
       - name: runs as an ordinary user, with the tools the agent expects
@@ -154,3 +170,25 @@ jobs:
           done
           bin/security.sh share add "$HOME/projects/plans" ro --no-apply
           grep -q "projects/plans|ro" config/stack.env
+
+  known-vulnerabilities:
+    # Weekly only, and never blocks a push: it reports published vulnerabilities in the Python packages the memory
+    # service installs and in the pinned OpenClaw's dependencies. A finding here is a reason to look, not a failed build.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4
+        with:
+          node-version: 24
+      - name: Python packages (services/requirements.txt)
+        run: |
+          python3 -m venv /tmp/audit && /tmp/audit/bin/pip install -q pip-audit
+          /tmp/audit/bin/pip-audit -r services/requirements.txt
+      - name: the pinned OpenClaw's dependencies (high and critical)
+        if: always()
+        run: |
+          v=$(sed -n 's/^OPENCLAW_RELEASE=\([^ ]*\) .*/\1/p' bin/lib.sh)
+          npm install -q --prefix /tmp/oc "openclaw@$v"
+          cd /tmp/oc && npm audit --omit=dev --audit-level=high

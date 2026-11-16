@@ -36,6 +36,7 @@ Everything is bash and small Python programs. There is no build step, and every 
 | `bin/gpu-release.sh` / `bin/gpu-restore.sh` | Game mode: free the 5080, then bring the model back and prove it's fast. |
 | `services/ready_proxy.py` | :19080. Holds connections while llama is loading, then splices raw TCP to the memory proxy. |
 | `services/rag_proxy.py` | :9081. Adds strong memory hits to the last user message, then streams through to llama. Fails open. |
+| `services/chatpath_selftest.py` | Starts the real readiness gate and memory proxy between a stand-in model and memory service and sends requests through them (24 checks: whole streamed reply, slow first token, where the memory goes, fail-open, game mode, traces hold no text). Needs no GPU; CI runs it. If you change either program, run it. |
 | `services/memory_service.py` | :5766. ChromaDB + BGE-M3 embeddings + bge-reranker, CPU only. `/query`, `/store`, `/health`. |
 | `guards/decode-floor.sh` | Cron guard: alarms if decode slows past a floor or free VRAM drops below a floor. |
 | `guards/services-watchdog.sh` | Cron guard: restarts a dead service (never llama; see game mode). |
@@ -100,6 +101,7 @@ Breaking any of these causes a failure that is easy to miss. The reasoning is in
 bash -n bin/*.sh guards/*.sh            # syntax
 python3 -m py_compile services/*.py console/server.py bin/mtp-graft.py patches/openclaw-*/*.py
 python3 services/outbound_guard.py selftest
+python3 services/chatpath_selftest.py    # real requests through the gate and memory proxy; no GPU, ~25 s
 bin/verify.sh                           # every layer, exit 0 = all pass
 bin/bench.sh                            # speed is part of correctness here
 ```

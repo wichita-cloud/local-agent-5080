@@ -65,6 +65,17 @@ splits=$(docker logs "$LLAMA_CONTAINER" 2>&1 | grep -oE 'graph splits = [0-9]+' 
 if printf '%s' "${EXTRA_ARGS:-}" | grep -q -- '--n-cpu-moe'; then pass "graph splits not checked: this profile keeps experts in system RAM by design (bin/bench.sh checks its speed)"
 elif [ -n "$splits" ] && [ "$splits" -le 4 ]; then pass "graph splits = $splits (model fully on GPU)"
 else caution "graph splits = ${splits:-unknown} (expect ~2): part of the model is not on the GPU" "replies will be much slower than expected"; hint "KV_ARGS must be q8_0/q8_0; check free VRAM; docs/TUNING.md"; fi
+# llama keeps a conversation's state in system RAM (--cache-ram) while another request uses the model, so the
+# conversation can carry on without being read again. A state bigger than the limit is dropped, and llama says so only
+# in its own log. Measured 2026-11-15 (Bolt 74B, 128k window, --cache-ram 2048): a 36k-token conversation's state was
+# 2,415 MiB, so it was dropped; with 4096 the next message read 29 tokens in 1 s instead of 35,869 in 47 s.
+drops=$(docker logs "$LLAMA_CONTAINER" 2>&1 | grep -c 'exceeds cache size limit')
+if [ "${drops:-0}" -gt 0 ]; then
+  big=$(docker logs "$LLAMA_CONTAINER" 2>&1 | grep 'exceeds cache size limit' | grep -oE 'state size [0-9]+' | grep -oE '[0-9]+' | sort -n | tail -1)
+  caution "the RAM prompt cache was too small $drops time(s) since the model started (largest conversation state: ${big:-?} MiB)" \
+          "after another request used the model (a background job, a second chat), that conversation was read again from the start: a pause of up to a minute before the reply"
+  hint "raise --cache-ram in EXTRA_ARGS of models/${PROFILE:-<profile>}.env above ${big:-that size} if system RAM allows, then bin/model.sh use ${ACTIVE_MODEL:-<profile>}"
+else pass "RAM prompt cache: no conversation state was dropped for size since the model started"; fi
 fi
 
 layer "4 Services"

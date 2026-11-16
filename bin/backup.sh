@@ -126,9 +126,9 @@ restore() {
     workspace)
       [ -f "$src/workspace.tar.gz" ] || { warn "no workspace in this backup"; continue; }
       tar xzf "$src/workspace.tar.gz" -C "$tmp"
-      local base="$tmp/$(basename "$WS")" put=0 kept=0
+      local base put=0 kept=0; base="$tmp/$(basename "$WS")"
       while IFS= read -r -d '' f; do
-        local rel="${f#$base/}" dst="$WS/${f#$base/}"
+        local dst="$WS/${f#$base/}"
         if [ ! -e "$dst" ] || [ ! -s "$dst" ] && [ -s "$f" ] || [ "$over" = 1 ]; then
           mkdir -p "$(dirname "$dst")"; cp -p "$f" "$dst"; put=$((put+1))
         else kept=$((kept+1)); fi

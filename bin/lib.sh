@@ -61,7 +61,9 @@ load_profile() {   # load_profile [name]: exports the profile's variables
   # Your adjustments to this profile (console → Models → Advanced, or bin/model.sh tune). Kept outside models/ so an
   # update to the shipped profile never overwrites them, and per profile so each model keeps its own. NO_TUNING=1
   # loads the shipped values only (the console shows them as "recommended").
+  # shellcheck disable=SC2034  # read by bin/model.sh and the console
   TUNED=no
+  # shellcheck disable=SC2034
   if [ "${NO_TUNING:-0}" != 1 ] && [ -f "$REPO/config/tuning/$name.env" ]; then . "$REPO/config/tuning/$name.env"; TUNED=yes; fi
   set +a
   LLAMA_IMAGE="${LLAMA_IMAGE_PROFILE:-$STACK_LLAMA_IMAGE}"
@@ -135,4 +137,5 @@ docker_fix_hint() {
   echo "        ${WSL_DISTRO_NAME:-this distro} on → Apply & restart. Then run this again."
 }
 
+# shellcheck disable=SC2034  # read by the scripts that source this file
 GAME_FLAG="$STATE_DIR/game-mode.flag"
