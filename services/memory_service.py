@@ -337,7 +337,9 @@ class Handler(BaseHTTPRequestHandler):
                     continue
                 text = str(r["text"]).strip()[:2000]
                 doc_id = hashlib.md5(text.encode()).hexdigest()
-                meta = {str(k): str(v) for k, v in (r.get("metadata") or {}).items()}
+                # ChromaDB refuses an empty metadata dict ("Expected metadata to be a non-empty dict"), which made the
+                # whole restore stop with an error at the first archived line that had none.
+                meta = {str(k): str(v) for k, v in (r.get("metadata") or {}).items()} or {"source": "restored"}
                 with _lock:
                     _last_use = time.time()
                     if collection.get(ids=[doc_id], include=[])["ids"]:

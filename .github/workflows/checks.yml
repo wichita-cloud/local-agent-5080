@@ -69,6 +69,8 @@ jobs:
           /tmp/venv/bin/pip install -q -r services/requirements.txt
       - name: imports
         run: /tmp/venv/bin/python3 -c "import chromadb, sentence_transformers, requests; print('ok')"
+      - name: memory service rules on the real ChromaDB (one memory per text, copy before delete, restore stays in its folder)
+        run: /tmp/venv/bin/python3 services/memory_selftest.py
 
   voice-packages:
     # the real installer, stopping before the weights download (bin/voice-install.sh --deps-only)

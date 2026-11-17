@@ -15,6 +15,15 @@ passes through. Found by running stricter checks over the whole repo (the result
   memory service is down, that game mode answers with a message, and that traces hold no message text, memory text or
   tool argument. Confirmed it can fail: with the 10 s socket timeout put back in a copy of the gate it reported the
   cut-off reply, and with a tool argument written into the trace it reported the leak. Runs in CI on every push.
+- **The memory service's rules are tested.** `services/memory_selftest.py` runs the real service and the real ChromaDB
+  on a throwaway store, with the two neural models replaced by word-overlap stand-ins (no 2.5 GB download, so CI can
+  run it): 26 checks, among them one memory per text, a copy written before anything is deleted, restore reading only
+  its own archive folder, and a health probe that answers while a query holds the lock. Confirmed it can fail: with the
+  folder check removed from a copy it reported the restore reading outside its folder, and with ids made unique it
+  reported the duplicates.
+- **Found by that test: a restore stopped at the first archived memory that had no metadata.** ChromaDB refuses an
+  empty metadata dict, so `/restore` answered 500 (seen with ChromaDB 1.5.8). Such a memory is now restored with
+  `source: restored`. Memories stored through `/store` always carry a date, so this affected files copied in from a backup.
 - **`verify.sh` reports a RAM prompt cache that is too small.** llama keeps a conversation's state in system RAM
   (`--cache-ram`) while another request uses the model; a state bigger than the limit is dropped, and only llama's own
   log says so. Measured 2026-11-15 with Bolt 74B at a 128k window and `--cache-ram 2048`: a 36k-token conversation's state
