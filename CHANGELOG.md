@@ -29,6 +29,10 @@ passes through. Found by running stricter checks over the whole repo (the result
   the GitHub actions are pinned to commits instead of tags. A weekly job lists published vulnerabilities in the Python
   packages and in the pinned OpenClaw's dependencies; it reports and never blocks a push. The new CI steps have been
   run by hand on this PC (all pass); the workflow file itself has not run on GitHub yet.
+- **Found by the first CI run on these branches: two scripts were not executable.** `bin/restore.sh` and
+  `patches/openclaw-2026.10.9/apply.sh` had been committed from Windows without the executable bit, so CI stopped with
+  exit 126 and a fresh clone would have answered "Permission denied" for both. Fixed, and CI now fails when any script in
+  `bin/`, `guards/` or `patches/*/apply.sh` is not executable in git.
 - **Small fixes those checks found:** three unused imports, two unused variables, one `local x=$(...)` that hid a
   failed command (`bin/backup.sh`). No behaviour change.
 - **`config/stack.env.example` lists five settings that were read but not documented** (`DECODE_WINDOW`,

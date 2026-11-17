@@ -19,6 +19,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+      - name: every script is executable in git (a script committed from Windows loses the bit and fails with "Permission denied")
+        run: |
+          bad=$(git ls-files -s bin/*.sh guards/*.sh patches/*/apply.sh | awk '$1 != "100755" {print $4}')
+          [ -z "$bad" ] || { echo "not executable: $bad"; echo "fix: git update-index --chmod=+x <file>"; exit 1; }
       - name: bash syntax
         run: for f in bin/*.sh guards/*.sh patches/*/apply.sh; do bash -n "$f" || exit 1; done
       - name: shellcheck (warnings too; SC1090 = sourcing a path built at run time, which is how config is loaded)
