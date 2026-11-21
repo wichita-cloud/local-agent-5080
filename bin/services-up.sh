@@ -25,7 +25,15 @@ flock -w 900 8 || die "another services-up has held the lock for 15 minutes"
 
 start_svc() {   # start_svc <name> <port> <script> <health-url> <wait-seconds>
   local name=$1 port=$2 script=$3 url=$4 wait=$5
-  if port_listening "$port"; then ok "$name already listening on :$port"; return 0; fi
+  if port_listening "$port"; then
+    # A port held by a program outside this Ubuntu (all WSL distros share one network) is not our service: found
+    # 2026-11-21 when another distro's Docker container took the search service's port and this said "already listening".
+    if [ -z "$(port_pid "$port")" ]; then
+      warn "$name: port $port is taken by a program outside this Ubuntu (another WSL distro or a Docker container), so $name can't start. Pick a free port for it in config/stack.env"
+      return 1
+    fi
+    ok "$name already listening on :$port"; return 0
+  fi
   log "starting $name on :$port"
   setsid nohup "$PY" "$REPO/services/$script" >>"$STATE_DIR/$name.stdout" 2>&1 < /dev/null 7>&- 8>&- 9>&- &
   for i in $(seq 1 "$wait"); do

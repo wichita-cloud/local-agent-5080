@@ -32,6 +32,16 @@ push (job `upgrade-from-last-release`). Its first runs found three bugs that eve
   lists Brave as "Brave", so every run reinstalled it; it now matches the plugin id.
 After the fixes: all 14 checks pass, and the upgrade's install log has no warnings.
 
+### On real hardware, and a port taken from outside
+The upgraded code was run on an RTX 5080 install with Nemotron 3.5 Bolt 74B (128k): `verify.sh` 32 passed, 0 failed;
+`bench.sh` 23.1 ms/token decode, 1,204 tok/s prefill on a 19,398-token prompt; a chat turn answered. With 15 tools
+offered instead of 31, the first-turn request was 41,492 bytes (11,467 tokens), down from 73,900 bytes (20,660 tokens).
+- **Found: the search service reported "already listening" while another program held its port.** All WSL distros
+  share one network; a Docker container from another distro had published port 18890, so this stack's search service
+  never started and the agent had no web search. `bin/services-up.sh` now says when a port is held by a program outside
+  this Ubuntu (instead of "already listening"), and `verify.sh` names that cause. The fix on the affected install was a
+  free `SEARCH_SHIM_PORT` in `config/stack.env`.
+
 ### Smaller prompts, and a malformed tool call no longer ends the turn
 - **16 tools the agent doesn't use are no longer offered to it** (`TOOLS_DENY`, default in `bin/lib.sh`, applied by
   `bin/gateway-up.sh`). OpenClaw offers 31 tools and sends every description with every message. On an install with 48

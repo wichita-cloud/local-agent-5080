@@ -175,6 +175,9 @@ else caution "outbound guard is not answering (:$OUTBOUND_GUARD_PORT)" "the web 
 
 if [ "$(search_wanted)" = searxng ]; then
   if curl -s -m 5 "http://127.0.0.1:$SEARCH_SHIM_PORT/health" 2>/dev/null | grep -q '"searxng": *true'; then pass "agent web search (SearXNG via :$SEARCH_SHIM_PORT)"
+  elif port_listening "$SEARCH_SHIM_PORT" && [ -z "$(port_pid "$SEARCH_SHIM_PORT")" ]; then
+    caution "agent web search: port $SEARCH_SHIM_PORT is taken by a program outside this Ubuntu, so the search service can't start" "the agent cannot search the web, but it can still read links you give it"
+    hint "set SEARCH_SHIM_PORT to a free port in config/stack.env, then bin/services-up.sh and bin/gateway-up.sh"
   else caution "agent web search: the SearXNG search service isn't answering (:$SEARCH_SHIM_PORT)" "the agent cannot search the web, but it can still read links you give it"; hint "bin/searxng.sh status; bin/services-up.sh"; fi
 fi
 if [ "${OVERNIGHT:-off}" = on ]; then
