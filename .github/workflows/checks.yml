@@ -198,3 +198,17 @@ jobs:
           v=$(sed -n 's/^OPENCLAW_RELEASE=\([^ ]*\) .*/\1/p' bin/lib.sh)
           npm install -q --prefix /tmp/oc "openclaw@$v"
           cd /tmp/oc && npm audit --omit=dev --audit-level=high
+
+  upgrade-from-last-release:
+    # Installs the last public release, upgrades it to this commit the way a user does (git pull, bin/install.sh), and
+    # checks that settings, files and plugins survive (bin/upgrade-selftest.sh). Its first run found three upgrade bugs.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+        with:
+          path: src
+      - name: install the release, upgrade, check
+        run: |
+          sudo touch /etc/wsl.conf
+          SOURCE_REPO="$GITHUB_WORKSPACE/src" SOURCE_REF=HEAD bash src/bin/upgrade-selftest.sh

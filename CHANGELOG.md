@@ -5,6 +5,27 @@ how. Newest first. Dates are UTC.
 
 ## 2026-11-21
 
+### Upgrading from the 2026.10.30 release, tested from start to finish
+`bin/upgrade-selftest.sh` installs the last public release (v2026.10.30.1), adds a gateway token, a line in
+`config/stack.env` and a workspace note, upgrades to the new code the way a user does (`git pull`, then
+`bin/install.sh`, in the same terminal) and checks what survived. No GPU and no model are needed; CI runs it on every
+push (job `upgrade-from-last-release`). Its first runs found three bugs that every upgrading user would have hit:
+- **Found: an upgrade could wipe the user's OpenClaw settings.** The old release's OpenClaw (2026.3.11, under Node 22)
+  stays installed beside the new one (2026.10.9, Node 24), and a terminal opened before the upgrade still finds it first.
+  Run from that terminal, `bin/gateway-up.sh` asked the old OpenClaw to check the converted settings; it called them
+  "damaged", and the repair rebuilt them from scratch. Now every script puts the pinned Node first on its PATH
+  (`bin/lib.sh`), and `gateway-up.sh` refuses to repair or rewrite anything through an OpenClaw that isn't the pinned one.
+- **Found: the search plugins didn't install when no one could be asked.** OpenClaw 2026.10.9 asks for consent to a
+  plugin's capabilities, and with no terminal (the Windows installer runs unattended) it refused, so web search was
+  missing. `bin/install.sh` now passes `--accept-capabilities` for the two official search plugins.
+- **Found: the old release's `OPENCLAW_VERSION=2026.3.11` line left both search plugins half-installed.** OpenClaw reads
+  that name as its own version. `bin/lib.sh` already cleared it, but `bin/install.sh` read `config/stack.env` again
+  afterwards and brought it back, so the new OpenClaw took itself for 2026.3.11 and the plugins ended "install
+  incomplete" ("config changed since last load"). It is now cleared after that read too. A fresh install was not affected.
+- Also: the installer's "already installed?" test for the search plugins looked for `@openclaw/brave-plugin`, but OpenClaw
+  lists Brave as "Brave", so every run reinstalled it; it now matches the plugin id.
+After the fixes: all 15 checks pass, and the upgrade's install log has no warnings.
+
 ### Smaller prompts, and a malformed tool call no longer ends the turn
 - **16 tools the agent doesn't use are no longer offered to it** (`TOOLS_DENY`, default in `bin/lib.sh`, applied by
   `bin/gateway-up.sh`). OpenClaw offers 31 tools and sends every description with every message. On an install with 48
