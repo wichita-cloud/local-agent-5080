@@ -25,6 +25,8 @@ set -a; . "$_cfg"; set +a
 [ -f "$REPO/config/secrets.env" ] && { set -a; . "$REPO/config/secrets.env"; set +a; }
 # Defaults for settings added after the first release, so an older config/stack.env keeps working under `set -u`.
 export CONSOLE_PORT="${CONSOLE_PORT:-18800}" OPENCLAW_WORKSPACE="${OPENCLAW_WORKSPACE:-$HOME/.openclaw/workspace}"
+# Tools never offered to the model (bin/gateway-up.sh). ${VAR-default}, not :-, so TOOLS_DENY="" in stack.env means "offer all".
+export TOOLS_DENY="${TOOLS_DENY-sessions_spawn sessions sessions_send sessions_list sessions_yield session_status secrets presence agents_wait agents_list subagents conversations_turn conversations_list conversations_send skills_read github_identity_status}"
 export VOICE_PORT="${VOICE_PORT:-8880}" VOICE_ENGINE="${VOICE_ENGINE:-nano}" VOICE_CPUSET="${VOICE_CPUSET:-8-15}"   SEARXNG_PORT="${SEARXNG_PORT:-18888}" SEARCH_SHIM_PORT="${SEARCH_SHIM_PORT:-18890}" OUTBOUND_GUARD_PORT="${OUTBOUND_GUARD_PORT:-18892}" SECURITY_PROFILE="${SECURITY_PROFILE:-standard}" WEB_ACCESS="${WEB_ACCESS:-on}" SANDBOX_NETWORK="${SANDBOX_NETWORK:-off}" SHARED_FOLDERS="${SHARED_FOLDERS:-}" SANDBOX_IMAGE="${SANDBOX_IMAGE:-local-agent-sandbox:1}"   STT_PORT="${STT_PORT:-8890}" STT_MODEL="${STT_MODEL:-small.en}" VOICE_NAME="${VOICE_NAME:-default}" VOICE_REPLIES="${VOICE_REPLIES:-inbound}"   VOICE_VENV="${VOICE_VENV:-$HOME/.local/share/local-agent/voice-venv}" VOICE_DIR="${VOICE_DIR:-$HOME/.local/share/local-agent/voices}"
 
 # The OpenClaw release this code is written and tested against (patches/openclaw-<release>/ match it exactly). Set here,

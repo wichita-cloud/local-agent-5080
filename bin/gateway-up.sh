@@ -66,6 +66,17 @@ oc telemetry.enabled false       # off by default; set explicitly so nothing can
 oc tools.codeMode '{"enabled":false}'
 oc tools.toolSearch false
 oc tools.loopDetection '{"enabled":true}'
+# Tools the model is never offered (TOOLS_DENY in config/stack.env; empty = offer all). Every offered tool's description
+# rides along with every request: OpenClaw offers 31, and on an install with 48 traced agent requests their descriptions
+# were most of the 74 KB first-turn prompt while only 7 tools were ever called. The default list is sub-agent and
+# multi-session tools (this stack's model serves one conversation at a time) and account services this stack doesn't
+# set up. Measured on a 2026.10.9 install with the same list: first-turn prompt 98,837 -> 67,050 bytes, memory test 8/8.
+python3 - "$TOOLS_DENY" > "$STATE_DIR/tools-deny.json" <<'PY'
+import json, sys
+print(json.dumps([t for t in sys.argv[1].replace(",", " ").split() if t]))
+PY
+if [ "$(cat "$STATE_DIR/tools-deny.json")" = "[]" ]; then openclaw config unset tools.deny >/dev/null 2>&1 || true
+else oc tools.deny "$(cat "$STATE_DIR/tools-deny.json")"; fi
 # OpenClaw's "dreaming" (on by default) runs a daily 3 am model job that rewrites MEMORY.md and keeps a DREAMS.md diary.
 # This stack has its own memory (services/memory_service.py, docs/MEMORY.md) and scheduled research; a second system
 # quietly editing the agent's notes overnight would be a surprise. Off, so the agent's files change only when it works.

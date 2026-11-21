@@ -38,6 +38,7 @@ class Model:
     """Stand-in for llama-server: records each chat request, streams a fixed reply."""
     def __init__(self):
         self.requests, self.delay, self.slots = [], 0.0, {"n_ctx": 32768, "n_prompt_tokens": 100}
+        self.bad_toolcalls = 0   # answer this many chat requests with llama's malformed-tool-call error first
         self.pieces = ["Hel", "lo ", "from ", "the ", "model."]
 
 
@@ -60,7 +61,11 @@ def model_handler(m):
             except ValueError:
                 return self._json(400, {"error": {"message": "bad json"}})
             m.requests.append(req)
-            timings = {"prompt_n": 20, "cache_n": 80, "prompt_ms": 10.0, "predicted_n": 5, "predicted_ms": 50.0}
+            if m.bad_toolcalls > 0:
+                m.bad_toolcalls -= 1
+                return self._json(500, {"error": {"code": 500, "type": "server_error", "message":
+                    "Failed to parse tool call arguments as JSON: [json.exception.parse_error.101] parse error"}})
+            timings ={"prompt_n": 20, "cache_n": 80, "prompt_ms": 10.0, "predicted_n": 5, "predicted_ms": 50.0}
             if not req.get("stream"):
                 return self._json(200, {"choices": [{"message": {"role": "assistant", "content": "".join(m.pieces)},
                                                      "finish_reason": "stop"}], "timings": timings})
@@ -215,6 +220,19 @@ def main():
         st2, data, _ = chat(sp, [{"role": "user", "content": "still there?"}])
         check("a malformed request is passed on, and the next request still works", st == 400 and st2 == 200 and reply_text(data) == want)
 
+        # 6b. a malformed tool call (llama's HTTP 500) is sent once more; a second failure reaches the client
+        n0 = len(model.requests); model.bad_toolcalls = 1
+        st, data, _ = chat(sp, [{"role": "user", "content": "use a tool"}], tools=WEB)
+        check("a malformed tool call is retried once and the turn is answered",
+              st == 200 and reply_text(data) == want and len(model.requests) - n0 == 2, "status %s, %d model requests" % (st, len(model.requests) - n0))
+        n0 = len(model.requests); model.bad_toolcalls = 2
+        st, data, _ = chat(sp, [{"role": "user", "content": "use a tool"}], tools=WEB, stream=False)
+        check("it is retried only once (a second failure is passed on, not looped)",
+              st == 500 and len(model.requests) - n0 == 2, "status %s, %d model requests" % (st, len(model.requests) - n0))
+        model.bad_toolcalls = 0
+        c = http.client.HTTPConnection("127.0.0.1", rp, timeout=5); c.request("GET", "/health"); h = json.loads(c.getresponse().read()); c.close()
+        check("retries are counted on the proxy's /health", h.get("toolcall_retries") == 2 and h.get("toolcall_retries_ok") == 1, str(h))
+
         # 7. kill switch
         mem.relevance = 0.9
         open(os.path.join(state, "rag-proxy.disable"), "w").close()
@@ -248,7 +266,10 @@ def main():
         tdir = os.path.join(state, "traces")
         text = "".join(open(os.path.join(tdir, f)).read() for f in os.listdir(tdir)) if os.path.isdir(tdir) else ""
         rows = [json.loads(l) for l in text.splitlines() if l.strip()]
-        check("one trace line per chat request", len(rows) == len(model.requests) + 1, "%d lines for %d requests" % (len(rows), len(model.requests) + 1))
+        # client requests = model requests + 1 malformed body (never reached the model) - 2 retries (no line of their own)
+        want_rows = len(model.requests) + 1 - 2
+        check("one trace line per chat request", len(rows) == want_rows, "%d lines for %d requests" % (len(rows), want_rows))
+        check("a retried request says so in its trace line", sorted(r.get("toolcall_retry") for r in rows if "toolcall_retry" in r) == [200, 500])
         check("the trace names the tool the model called and llama's cache numbers",
               any(r.get("tool_calls") == ["web_search"] and r.get("cache_n") == 80 and r.get("finish") == "tool_calls" for r in rows))
         check("no message text, memory text or tool argument in the trace", MARK not in text and "Marigold" not in text and TOOL_ARG not in text)

@@ -89,6 +89,7 @@ CTX_NOTE_NOW = ("(Automatic note: this conversation is about to be condensed ({p
                 "warning that the conversation is about to be condensed, name the file the progress is saved in, and "
                 "list the resume options numbered, so the user can reply with a number now or say "
                 "'continue <project>' in a new chat.)")
+TOOLCALL_RETRY = os.environ.get("TOOLCALL_RETRY", "1") != "0"
 TRACE      = os.environ.get("TRACE", "1") != "0"
 TRACE_DIR  = os.path.join(STATE_DIR, "traces")
 TRACE_DAYS = 14
@@ -131,6 +132,13 @@ def _record(failed_reason=None, retried_ok=False):
             _failures.append((now, failed_reason))
         while _failures and _failures[0][0] < now - 86400:
             _failures.popleft()
+
+
+def _record_retry(ok):
+    with _stats_lock:
+        _stats["toolcall_retries"] = _stats.get("toolcall_retries", 0) + 1
+        if ok:
+            _stats["toolcall_retries_ok"] = _stats.get("toolcall_retries_ok", 0) + 1
 
 
 def health_stats():
@@ -407,6 +415,21 @@ class Handler(BaseHTTPRequestHandler):
                 trace.update(status=502, ms=int(1000 * (time.time() - trace.pop("t0"))))
                 write_trace(trace)
             return
+        # TOOL-CALL RETRY. llama answers HTTP 500 "Failed to parse tool call arguments as JSON" when the model writes a
+        # malformed tool call in a non-streamed reply, or before the first byte of a streamed one, and the turn ends
+        # there. The same request sampled again almost always comes out well-formed. Retried once, and only while
+        # nothing has been sent to the client. An error that arrives inside a stream can't be retried this way.
+        # TOOLCALL_RETRY=0 turns it off.
+        if TOOLCALL_RETRY and up.status_code == 500 and method == "POST" and self.path.endswith("/v1/chat/completions"):
+            try:
+                if b"Failed to parse tool call" in up.content[:4000]:
+                    log("the model wrote a malformed tool call (HTTP 500): sending the same request once more")
+                    up = requests.request(method, UPSTREAM + self.path, data=body, headers=hdrs, stream=True, timeout=(10, 600))
+                    _record_retry(up.status_code == 200)
+                    if trace:
+                        trace["toolcall_retry"] = up.status_code
+            except Exception as e:
+                log("tool-call retry failed: %s" % e)
         if trace:
             sniff = ReplySniffer(trace["stream"])
         self.send_response(up.status_code)
