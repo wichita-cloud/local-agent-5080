@@ -79,6 +79,20 @@ fi
 . "$HOME/.nvm/nvm.sh"
 nvm install "$NODE_MAJOR" >/dev/null && nvm alias default "$NODE_MAJOR" >/dev/null && nvm use "$NODE_MAJOR" >/dev/null || die "Node $NODE_MAJOR install failed"
 have=$(openclaw --version 2>/dev/null | grep -oE '[0-9]{4}\.[0-9]+\.[0-9]+' | head -1)
+if [ -n "$have" ] && [ "$have" != "$OPENCLAW_RELEASE" ]; then
+  # The running gateway (the old version) keeps rewriting its settings file, and OpenClaw refuses to save a plugin over
+  # a file that changed under it ("config changed since last load"): found 2026-11-21 when CI upgraded an install whose
+  # gateway was running, as on any real PC. Stop it, and hold gateway-up.sh's lock until the new OpenClaw and its plugins
+  # are in, so the watchdog can't start the old gateway again meanwhile. The watchdog (or bin/up.sh) starts the new one.
+  mkdir -p "$STATE_DIR"; exec 8>"$STATE_DIR/gateway-up.lock"
+  flock -w 200 8 || warn "a gateway start was still running; continuing"
+  if port_listening "$GATEWAY_PORT"; then
+    log "    stopping the running gateway (OpenClaw $have) for the upgrade"
+    for p in $(ps -eo pid,comm | awk '$2 ~ /^openclaw/ {print $1}'); do kill "$p" 2>/dev/null; done
+    for _ in 1 2 3 4 5 6 7 8 9 10; do port_listening "$GATEWAY_PORT" || break; sleep 1; done
+    port_listening "$GATEWAY_PORT" && for p in $(ps -eo pid,comm | awk '$2 ~ /^openclaw/ {print $1}'); do kill -9 "$p" 2>/dev/null; done
+  fi
+fi
 if [ "$have" != "$OPENCLAW_RELEASE" ]; then
   # Upgrading an existing install: OpenClaw only converts settings written before 2026.9.7 from that release, so step
   # through it. Without this the new release calls the old settings file invalid and no plugin installs.
@@ -111,6 +125,7 @@ for plug in searxng brave; do
   # These two are OpenClaw's own official plugins, pinned to the same release.
   openclaw plugins install "@openclaw/$plug-plugin@$OPENCLAW_RELEASE" --accept-capabilities >/dev/null 2>&1     || openclaw plugins install "@openclaw/$plug-plugin@$OPENCLAW_RELEASE" --force --accept-capabilities >/dev/null 2>&1     || warn "could not install the $plug search plugin; web search may not work"
 done
+exec 8>&-   # release gateway-up.sh's lock (held only during an upgrade, see above)
 
 log "4/9 Python venv (services)"
 if [ ! -x "$VENV/bin/python3" ]; then python3 -m venv "$VENV" || die "venv creation failed"; fi

@@ -22,9 +22,15 @@ push (job `upgrade-from-last-release`). Its first runs found three bugs that eve
   that name as its own version. `bin/lib.sh` already cleared it, but `bin/install.sh` read `config/stack.env` again
   afterwards and brought it back, so the new OpenClaw took itself for 2026.3.11 and the plugins ended "install
   incomplete" ("config changed since last load"). It is now cleared after that read too. A fresh install was not affected.
+- **Found in CI: a running gateway blocks the plugin installs.** On a real PC the old release's gateway is running
+  during the upgrade and keeps rewriting its settings file, and OpenClaw refuses to save a plugin over a file that
+  changed under it ("config changed since last load"). `bin/install.sh` now stops the running gateway before it swaps
+  OpenClaw and holds `gateway-up.sh`'s lock until the new OpenClaw and its plugins are in, so the watchdog can't restart
+  the old gateway meanwhile; the watchdog or `bin/up.sh` starts the new one. (A container without a running gateway
+  passed without this; GitHub's runner, where the old install had started its gateway, did not.)
 - Also: the installer's "already installed?" test for the search plugins looked for `@openclaw/brave-plugin`, but OpenClaw
   lists Brave as "Brave", so every run reinstalled it; it now matches the plugin id.
-After the fixes: all 15 checks pass, and the upgrade's install log has no warnings.
+After the fixes: all 14 checks pass, and the upgrade's install log has no warnings.
 
 ### Smaller prompts, and a malformed tool call no longer ends the turn
 - **16 tools the agent doesn't use are no longer offered to it** (`TOOLS_DENY`, default in `bin/lib.sh`, applied by

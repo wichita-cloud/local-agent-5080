@@ -68,5 +68,11 @@ chk "gateway-up, run from the old terminal, ran without errors" '! grep -q -i -E
 chk "no settings file was declared broken" '! ls "$HOME"/.openclaw/openclaw.json.broken-* 2>/dev/null | grep -q .'
 chk "settings still valid after gateway-up" '! nt "openclaw config validate" 2>&1 | grep -q -i invalid'
 printf '\nupgrade selftest: %s\n' "$([ "$FAILS" = 0 ] && echo ok || echo "$FAILS FAILED")"
-[ "$FAILS" = 0 ] || { echo "--- install log (upgrade), last 30 lines"; tail -30 "$HOME/install-new.log"; echo "--- gateway-up log"; tail -15 "$HOME/gateway-up.log"; }
+if [ "$FAILS" != 0 ]; then
+  echo "--- install log (upgrade), last 30 lines"; tail -30 "$HOME/install-new.log"
+  echo "--- gateway-up log"; tail -15 "$HOME/gateway-up.log"
+  echo "--- plugins, and a search plugin install by hand with its own output"
+  nt "openclaw plugins list" 2>&1 | grep -i -E "searxng|brave|incomplete" | head -6
+  nt "openclaw plugins install @openclaw/searxng-plugin@\$(openclaw --version | grep -oE '[0-9]{4}\.[0-9]+\.[0-9]+' | head -1) --force --accept-capabilities" 2>&1 | tail -8
+fi
 exit "$FAILS"
