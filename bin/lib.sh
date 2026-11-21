@@ -35,6 +35,13 @@ export VOICE_PORT="${VOICE_PORT:-8880}" VOICE_ENGINE="${VOICE_ENGINE:-nano}" VOI
 OPENCLAW_RELEASE=2026.10.9 NODE_MAJOR=24
 OPENCLAW_BRIDGE=2026.9.7   # settings older than this are only converted by this release (bin/install.sh steps through it)
 export OPENCLAW_RELEASE OPENCLAW_BRIDGE NODE_MAJOR; unset OPENCLAW_VERSION
+# Every script uses the Node (and so the OpenClaw) this release installs, whatever the calling shell has on its PATH.
+# Found 2026-11-21 in an upgrade test: the previous release's OpenClaw stays installed under the old Node, a terminal
+# opened before the upgrade still finds it first, and that old OpenClaw called the converted settings file "damaged",
+# so gateway-up.sh rebuilt it from scratch and the user's own settings were lost.
+_node_dir=$(ls -d "$HOME/.nvm/versions/node/v$NODE_MAJOR".*/bin 2>/dev/null | sort -V | tail -1)
+[ -n "$_node_dir" ] && export PATH="$_node_dir:$PATH"
+unset _node_dir
 
 # No usage statistics from any component: ChromaDB (memory), Hugging Face libraries, Gradio (pulled in by the voice
 # add-on), and anything honouring the DO_NOT_TRACK convention. This stack only goes online for what you ask it to do.

@@ -100,7 +100,10 @@ for plug in searxng brave; do
   if openclaw plugins list 2>&1 | grep -v 'install incomplete' | grep -q "@openclaw/$plug-plugin"; then continue; fi
   # --force on the second try: an install that was cut short (or refused under old settings) leaves a half-made
   # plugin folder that a plain install will not replace.
-  openclaw plugins install "@openclaw/$plug-plugin@$OPENCLAW_RELEASE" >/dev/null 2>&1     || openclaw plugins install "@openclaw/$plug-plugin@$OPENCLAW_RELEASE" --force >/dev/null 2>&1     || warn "could not install the $plug search plugin; web search may not work"
+  # --accept-capabilities: 2026.10.9 asks for consent to a plugin's capabilities and, with no terminal to ask on (the
+  # Windows installer runs unattended), refuses. Found 2026-11-21: an unattended upgrade installed neither search plugin.
+  # These two are OpenClaw's own official plugins, pinned to the same release.
+  openclaw plugins install "@openclaw/$plug-plugin@$OPENCLAW_RELEASE" --accept-capabilities >/dev/null 2>&1     || openclaw plugins install "@openclaw/$plug-plugin@$OPENCLAW_RELEASE" --force --accept-capabilities >/dev/null 2>&1     || warn "could not install the $plug search plugin; web search may not work"
 done
 
 log "4/9 Python venv (services)"

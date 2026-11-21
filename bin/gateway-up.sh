@@ -40,6 +40,10 @@ oc() { openclaw config set "$@" >/dev/null 2>&1 || warn "config set failed: $*";
 # itself keeps (openclaw.json.bak, .bak.1, ...) that reads cleanly, and only if none does, start from an empty file, which the
 # lines below then fill in from config/stack.env. Anything you had set by hand (a chat app, say) is in the kept copy.
 OCF="$HOME/.openclaw/openclaw.json"
+# An OpenClaw other than the pinned release reads newer settings as "invalid" although nothing is damaged: never repair
+# (and so never reset) the file through the wrong version. Seen in an upgrade test, 2026-11-21.
+oc_have=$(openclaw --version 2>/dev/null | grep -oE '[0-9]{4}\.[0-9]+\.[0-9]+' | head -1)
+[ "$oc_have" = "$OPENCLAW_RELEASE" ] || die "this is OpenClaw ${oc_have:-unknown} ($(command -v openclaw)), not $OPENCLAW_RELEASE: run bin/install.sh, then open a new terminal"
 if [ -f "$OCF" ] && openclaw config get gateway.port 2>&1 | grep -q -i 'config invalid'; then
   warn "OpenClaw's settings file is damaged; repairing"
   keep="$OCF.broken-$(date -u +%Y%m%d-%H%M%S)"; cp "$OCF" "$keep"; fixed=""
