@@ -3,6 +3,29 @@
 What changed, and why. Every fix here was found by running the stack, not by reading code alone; the "found" notes say
 how. Newest first. Dates are UTC.
 
+## 2026-11-21
+
+### Smaller prompts, and a malformed tool call no longer ends the turn
+- **16 tools the agent doesn't use are no longer offered to it** (`TOOLS_DENY`, default in `bin/lib.sh`, applied by
+  `bin/gateway-up.sh`). OpenClaw offers 31 tools and sends every description with every message. On an install with 48
+  traced agent requests the first-turn prompt was 73.9 KB (20,660 tokens), and only 7 tools were ever called: `exec`,
+  `memory_search`, `write`, `read`, `edit`, `openclaw_ls`, `memory_get`. The default list hides the sub-agent and
+  multi-session tools (this stack's model serves one conversation at a time) and account tools the stack doesn't set up
+  (`secrets`, `presence`, `github_identity_status`, `skills_read`). Measured on another OpenClaw 2026.10.9 install with
+  the same list: the first-turn prompt went from 98,837 to 67,050 bytes, and a memory test afterwards recalled 8 of 8
+  facts. On this stack's own install the saving has not been measured yet (that needs the model running).
+  `TOOLS_DENY=""` in `config/stack.env` offers every tool again; a list of your own replaces the default. Checked on a
+  copy of an installed settings file: OpenClaw accepts the list, `config validate` passes, and clearing it works.
+- **A malformed tool call is retried once.** When the model writes a tool call llama can't parse, llama answers HTTP 500
+  ("Failed to parse tool call arguments as JSON") and the turn ended there; it was seen in a research run with
+  Nemotron 3.5 Bolt. The memory proxy now sends the same request once more when that error comes before any reply byte
+  was relayed; a second failure is passed on. Counted on the proxy's `/health` (`toolcall_retries`,
+  `toolcall_retries_ok`) and marked in the trace line. `TOOLCALL_RETRY=0` turns it off. An error that arrives inside a
+  streamed reply can't be retried this way. Four new checks in `services/chatpath_selftest.py`; with the retry switched
+  off in a copy, they fail.
+- Checked, no change needed: the overnight research job already asks for no thinking on every request
+  (`chat_template_kwargs.enable_thinking=false`), so a thinking model can't spend its small reply limit on thinking.
+
 ## 2026-11-16
 
 ### Checks that were missing
