@@ -1,7 +1,11 @@
-# local-agent-5080
+# local-agent-5080 (BoomerGT)
 
 Run a capable open-weights model as a local AI agent on an **RTX 5080 (16 GB) + 32 GB RAM** Windows PC.
-Everything runs on your machine. There are no cloud model calls and no subscription.
+The model runs on your machine: there are no cloud model calls and no subscription.
+
+**Install:** download **`BoomerGT-setup.exe`** from the [latest release](https://github.com/wichita-cloud/local-agent-5080/releases/latest)
+and follow the wizard (about an hour, mostly downloads), or set it up by hand with the [Quick start](#quick-start-about-an-hour-most-of-it-downloads).
+Default model on 32 GB: NVIDIA **Nemotron 3.5 Bolt 74B** with a 128k context window.
 
 **It's a blank slate, and it's yours.** The agent ships with no personality, no memories and no agenda. You decide
 who it is, what it knows and what it's for. The model weights, every conversation and everything it remembers stay on
@@ -51,8 +55,9 @@ measured on that one.
 > Also worth knowing: depending on the board, the motherboard's port may cap refresh rate, resolution or HDR, and
 > NVIDIA display features such as G-Sync need the monitor on the 5080. Details: [docs/STABILITY.md](docs/STABILITY.md).
 
-> **Who this is for:** someone comfortable pasting commands into a terminal. It is not a one-click installer.
-> Please read [Disclaimer & Responsible Use](#disclaimer--responsible-use) before you use it.
+> **Who this is for:** anyone with the hardware above. The **BoomerGT** Windows installer does the whole setup in a
+> wizard ([Quick start](#quick-start-about-an-hour-most-of-it-downloads)); the manual way needs someone comfortable
+> pasting commands into a terminal. Please read [Disclaimer & Responsible Use](#disclaimer--responsible-use) before you use it.
 > If you use an AI coding tool (Claude Code, Codex, Cursor and so on), point it at [`AGENTS.md`](AGENTS.md) first. That
 > file is written so a coding agent can understand and safely change this repo.
 
@@ -78,7 +83,7 @@ measured on that one.
 | Your own character | the agent's name, personality and rules are plain Markdown files you edit in the console. It ships neutral |
 | Memory | Local BGE-M3 embeddings and a reranker on the CPU; relevant memories are added to each turn automatically |
 | Reliability | A layered verifier (`bin/verify.sh`), cron guards that detect silent GPU spill, and a "game mode" that frees the GPU |
-| The trade-off | for the Bolt 74B and the 27B, Windows runs on the motherboard's video output so the model gets the whole card; or run the 14B/8B with the monitor on the 5080 ([see above](#local-agent-5080)) |
+| The trade-off | for the Bolt 74B and the 27B, Windows runs on the motherboard's video output so the model gets the whole card; or run the 14B/8B with the monitor on the 5080 ([see above](#local-agent-5080-boomergt)) |
 
 ---
 

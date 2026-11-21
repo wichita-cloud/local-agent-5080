@@ -23,6 +23,9 @@ how. Newest first. Dates are UTC.
   `toolcall_retries_ok`) and marked in the trace line. `TOOLCALL_RETRY=0` turns it off. An error that arrives inside a
   streamed reply can't be retried this way. Four new checks in `services/chatpath_selftest.py`; with the retry switched
   off in a copy, they fail.
+- **The README says BoomerGT and links the installer at the top.** The project name and the installer download first
+  appeared some 80 lines down, and an older note further up still said "It is not a one-click installer". The repo's
+  GitHub description, homepage link (the latest release) and topic tags were updated to match.
 - Checked, no change needed: the overnight research job already asks for no thinking on every request
   (`chat_template_kwargs.enable_thinking=false`), so a thinking model can't spend its small reply limit on thinking.
 
