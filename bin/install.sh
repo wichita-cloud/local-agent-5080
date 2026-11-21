@@ -24,6 +24,10 @@ fi
 log "0/9 checking for conflicts (ports, an existing OpenClaw)"
 "$REPO/bin/preflight.sh" || exit 1
 set -a; . "$REPO/config/stack.env"; set +a      # preflight may have moved a port
+# lib.sh clears OPENCLAW_VERSION, and re-reading the settings brings it back: the 2026.10.30 release's stack.env sets
+# OPENCLAW_VERSION=2026.3.11, which OpenClaw reads as its OWN version. Found 2026-11-21 in an upgrade test: with it,
+# OpenClaw 2026.10.9 took itself for 2026.3.11 and both search plugins were left "install incomplete".
+unset OPENCLAW_VERSION
 
 log "1/9 apt packages"
 need=""
@@ -97,7 +101,9 @@ ok "openclaw $(openclaw --version 2>/dev/null | head -1)"
 # Web search providers are separate official plugins now, pinned to the same release. Installed whether or not they are
 # used: bin/gateway-up.sh only lets the chosen one load (SearXNG through services/search_shim.py, or Brave with a key).
 for plug in searxng brave; do
-  if openclaw plugins list 2>&1 | grep -v 'install incomplete' | grep -q "@openclaw/$plug-plugin"; then continue; fi
+  # Match the plugin id column: Brave is listed by its display name ("Brave"), not "@openclaw/brave-plugin".
+  pl=$(openclaw plugins list 2>&1)
+  if ! printf '%s' "$pl" | grep -q -i "\"$plug\" install incomplete" && printf '%s' "$pl" | grep -q -E "│ *$plug *│"; then continue; fi
   # --force on the second try: an install that was cut short (or refused under old settings) leaves a half-made
   # plugin folder that a plain install will not replace.
   # --accept-capabilities: 2026.10.9 asks for consent to a plugin's capabilities and, with no terminal to ask on (the
